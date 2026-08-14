@@ -32,3 +32,6 @@ Thumbs.db
 # Build / cache
 coverage/
 .cache/
+.chroma/
+backend/.chroma/
+backend/chroma/

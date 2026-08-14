@@ -1,0 +1,5 @@
+export { AiAssistantBoard } from "@/components/ai-assistant/ai-assistant-board"
+export { AiEmptyState } from "@/components/ai-assistant/ai-empty-state"
+export { AiQuestionForm } from "@/components/ai-assistant/ai-question-form"
+export { AiResultPanel } from "@/components/ai-assistant/ai-result-panel"
+export { AiSourcesList } from "@/components/ai-assistant/ai-sources-list"

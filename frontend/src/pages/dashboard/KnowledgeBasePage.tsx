@@ -1,5 +1,5 @@
-import { DashboardPlaceholderPage } from "@/pages/dashboard/DashboardPlaceholderPage"
+import { KnowledgeBaseBoard } from "@/components/knowledge-base"
 
 export function KnowledgeBasePage() {
-  return <DashboardPlaceholderPage title="Knowledge Base" />
+  return <KnowledgeBaseBoard />
 }

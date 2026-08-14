@@ -1,26 +1,24 @@
+import { useEffect, useState } from "react"
 import { motion } from "framer-motion"
 import {
-  ArrowUpRight,
   BookOpen,
   Gauge,
   HeartPulse,
+  Loader2,
   Sparkles,
 } from "lucide-react"
 
 import type { Conversation } from "@/data/conversations"
+import type { ConversationAiSuggestion } from "@/types/conversations"
+import { suggestConversationReply } from "@/services/conversation-ai"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Progress } from "@/components/ui/progress"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
+import { getApiErrorMessage } from "@/utils/api-error"
 import { cn } from "@/lib/utils"
 
-const sentimentStyles = {
-  Positive:
-    "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300",
-  Neutral: "bg-slate-100 text-slate-700 dark:bg-slate-500/15 dark:text-slate-300",
-  Negative: "bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300",
-} as const
+type AiPanelStatus = "idle" | "loading" | "success" | "error"
 
 type AiAssistantPanelProps = {
   conversation: Conversation | null
@@ -29,12 +27,48 @@ type AiAssistantPanelProps = {
   className?: string
 }
 
+function formatScore(score: number | null): string | null {
+  if (score === null || Number.isNaN(score)) return null
+  return `${Math.round(score * 100)}% match`
+}
+
 export function AiAssistantPanel({
   conversation,
   onUseSuggestion,
   onEscalate,
   className,
 }: AiAssistantPanelProps) {
+  const [status, setStatus] = useState<AiPanelStatus>("idle")
+  const [suggestion, setSuggestion] = useState<ConversationAiSuggestion | null>(
+    null,
+  )
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    setStatus("idle")
+    setSuggestion(null)
+    setError(null)
+  }, [conversation?.id])
+
+  const handleGenerate = async () => {
+    if (!conversation || status === "loading") return
+
+    setStatus("loading")
+    setError(null)
+
+    try {
+      const result = await suggestConversationReply(conversation.id, 5)
+      setSuggestion(result)
+      setStatus("success")
+    } catch (err) {
+      setSuggestion(null)
+      setError(
+        getApiErrorMessage(err, "Unable to generate an AI suggestion."),
+      )
+      setStatus("error")
+    }
+  }
+
   if (!conversation) {
     return (
       <aside
@@ -50,7 +84,10 @@ export function AiAssistantPanel({
     )
   }
 
-  const { ai } = conversation
+  const hasSources =
+    suggestion !== null &&
+    suggestion.sources.length > 0 &&
+    suggestion.retrievedCount > 0
 
   return (
     <aside
@@ -68,7 +105,9 @@ export function AiAssistantPanel({
             <p className="text-sm font-semibold text-foreground">
               AI Suggestions
             </p>
-            <p className="text-xs text-muted-foreground">Context-aware assist</p>
+            <p className="text-xs text-muted-foreground">
+              Grounded in your knowledge base
+            </p>
           </div>
         </div>
       </div>
@@ -84,16 +123,63 @@ export function AiAssistantPanel({
               <Sparkles className="size-4 text-primary" aria-hidden />
               Suggested reply
             </div>
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              {ai.suggestedReply}
-            </p>
-            <Button
-              type="button"
-              className="mt-3 w-full rounded-2xl"
-              onClick={() => onUseSuggestion(ai.suggestedReply)}
-            >
-              Use suggestion
-            </Button>
+
+            {status === "idle" ? (
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                Generate a grounded reply from the latest customer message and
+                your published knowledge.
+              </p>
+            ) : null}
+
+            {status === "loading" ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" aria-hidden />
+                Generating suggestion…
+              </div>
+            ) : null}
+
+            {status === "error" && error ? (
+              <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
+                {error}
+              </p>
+            ) : null}
+
+            {status === "success" && suggestion ? (
+              <p className="text-sm leading-relaxed text-muted-foreground whitespace-pre-wrap">
+                {suggestion.suggestedReply}
+              </p>
+            ) : null}
+
+            <div className="mt-3 flex flex-col gap-2">
+              <Button
+                type="button"
+                variant={status === "success" ? "outline" : "default"}
+                className="w-full rounded-2xl"
+                disabled={status === "loading"}
+                onClick={() => void handleGenerate()}
+              >
+                {status === "loading" ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" aria-hidden />
+                    Generating…
+                  </>
+                ) : status === "success" || status === "error" ? (
+                  "Regenerate suggestion"
+                ) : (
+                  "Generate AI suggestion"
+                )}
+              </Button>
+
+              {status === "success" && suggestion ? (
+                <Button
+                  type="button"
+                  className="w-full rounded-2xl"
+                  onClick={() => onUseSuggestion(suggestion.suggestedReply)}
+                >
+                  Use suggestion
+                </Button>
+              ) : null}
+            </div>
           </motion.section>
 
           <motion.section
@@ -104,21 +190,56 @@ export function AiAssistantPanel({
           >
             <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground">
               <BookOpen className="size-4 text-primary" aria-hidden />
-              Knowledge article
+              Knowledge sources
             </div>
-            <p className="text-sm font-medium text-foreground">
-              {ai.knowledgeArticle.title}
-            </p>
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              {ai.knowledgeArticle.snippet}
-            </p>
-            <button
-              type="button"
-              className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:text-primary/80"
-            >
-              Open article
-              <ArrowUpRight className="size-3.5" aria-hidden />
-            </button>
+
+            {status === "idle" || status === "loading" ? (
+              <p className="text-sm text-muted-foreground">
+                {status === "loading"
+                  ? "Retrieving relevant knowledge…"
+                  : "Sources appear after you generate a suggestion."}
+              </p>
+            ) : null}
+
+            {status === "error" ? (
+              <p className="text-sm text-muted-foreground">
+                Knowledge sources unavailable until generation succeeds.
+              </p>
+            ) : null}
+
+            {status === "success" && !hasSources ? (
+              <p className="text-sm text-muted-foreground">
+                No relevant knowledge found.
+              </p>
+            ) : null}
+
+            {status === "success" && hasSources ? (
+              <ul className="space-y-3">
+                {suggestion!.sources.map((source, index) => {
+                  const scoreLabel = formatScore(source.score)
+                  return (
+                    <li
+                      key={source.chunkId ?? source.documentId ?? `source-${index}`}
+                      className="rounded-xl border border-border/60 bg-card/40 px-3 py-2"
+                    >
+                      <p className="text-sm font-medium text-foreground">
+                        {source.title?.trim() || "Untitled document"}
+                      </p>
+                      {source.source?.trim() ? (
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {source.source}
+                        </p>
+                      ) : null}
+                      {scoreLabel ? (
+                        <p className="mt-1 text-[11px] font-medium text-primary">
+                          {scoreLabel}
+                        </p>
+                      ) : null}
+                    </li>
+                  )
+                })}
+              </ul>
+            ) : null}
           </motion.section>
 
           <section className="grid gap-3">
@@ -129,28 +250,25 @@ export function AiAssistantPanel({
               </div>
               <Badge
                 variant="secondary"
-                className={cn(
-                  "rounded-full border-0",
-                  sentimentStyles[ai.sentiment],
-                )}
+                className="rounded-full border-0 bg-slate-100 text-slate-700 dark:bg-slate-500/15 dark:text-slate-300"
               >
-                {ai.sentiment}
+                Not analyzed yet
               </Badge>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Sentiment analysis is not available yet (UI placeholder).
+              </p>
             </div>
 
             <div className="rounded-2xl border border-border/70 bg-background p-4">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                  <Gauge className="size-4 text-primary" aria-hidden />
-                  Confidence score
-                </div>
-                <span className="text-sm font-semibold text-primary">
-                  {ai.confidence}%
-                </span>
+              <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground">
+                <Gauge className="size-4 text-primary" aria-hidden />
+                Confidence score
               </div>
-              <Progress value={ai.confidence} className="h-2" />
+              <p className="text-sm font-medium text-muted-foreground">
+                Not available
+              </p>
               <p className="mt-2 text-xs text-muted-foreground">
-                Based on retrieval quality and intent match.
+                Confidence scoring is not provided by the backend yet.
               </p>
             </div>
           </section>

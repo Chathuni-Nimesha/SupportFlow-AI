@@ -1,5 +1,5 @@
-import { DashboardPlaceholderPage } from "@/pages/dashboard/DashboardPlaceholderPage"
+import { AnalyticsBoard } from "@/components/analytics"
 
 export function AnalyticsPage() {
-  return <DashboardPlaceholderPage title="Analytics" />
+  return <AnalyticsBoard />
 }

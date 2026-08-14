@@ -7,21 +7,24 @@ import {
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 
-import { ticketKpis } from "@/data/tickets"
 import { Card, CardContent } from "@/components/ui/card"
 
-const icons: Record<string, LucideIcon> = {
-  open: CircleDot,
-  pending: Clock3,
-  resolved: CheckCircle2,
-  high: AlertTriangle,
-}
+const kpis: {
+  id: string
+  label: string
+  icon: LucideIcon
+}[] = [
+  { id: "open", label: "Open Tickets", icon: CircleDot },
+  { id: "pending", label: "Pending", icon: Clock3 },
+  { id: "resolved", label: "Resolved Today", icon: CheckCircle2 },
+  { id: "high", label: "High Priority", icon: AlertTriangle },
+]
 
 export function TicketKpiCards() {
   return (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-      {ticketKpis.map((kpi, index) => {
-        const Icon = icons[kpi.id]
+      {kpis.map((kpi, index) => {
+        const Icon = kpi.icon
         return (
           <motion.div
             key={kpi.id}
@@ -36,8 +39,8 @@ export function TicketKpiCards() {
                     <p className="text-sm font-medium text-muted-foreground">
                       {kpi.label}
                     </p>
-                    <p className="mt-2 text-3xl font-semibold tracking-tight text-foreground">
-                      {kpi.value}
+                    <p className="mt-2 text-lg font-semibold tracking-tight text-muted-foreground">
+                      Not available
                     </p>
                   </div>
                   <span className="flex size-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
@@ -45,10 +48,7 @@ export function TicketKpiCards() {
                   </span>
                 </div>
                 <p className="mt-4 text-xs text-muted-foreground">
-                  <span className="font-semibold text-foreground">
-                    {kpi.change}
-                  </span>{" "}
-                  {kpi.helper}
+                  No tickets backend yet
                 </p>
               </CardContent>
             </Card>

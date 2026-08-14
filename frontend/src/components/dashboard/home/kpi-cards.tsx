@@ -6,7 +6,7 @@ import {
 } from "lucide-react"
 
 import { KpiCard } from "@/components/dashboard/home/kpi-card"
-import { dashboardKpis } from "@/data/dashboard-home"
+import type { KpiMetric } from "@/data/dashboard-home"
 
 const icons = {
   conversations: MessageSquare,
@@ -15,10 +15,65 @@ const icons = {
   csat: BarChart3,
 } as const
 
-export function KpiCards() {
+type KpiCardsProps = {
+  conversationCount: number
+  isLoading?: boolean
+  error?: string | null
+}
+
+export function KpiCards({
+  conversationCount,
+  isLoading = false,
+  error = null,
+}: KpiCardsProps) {
+  const conversationValue = isLoading
+    ? "…"
+    : error
+      ? "—"
+      : conversationCount.toLocaleString()
+
+  const metrics: KpiMetric[] = [
+    {
+      id: "conversations",
+      label: "Total Conversations",
+      value: conversationValue,
+      change: error ? "Error" : isLoading ? "Loading" : "Live",
+      trend: "neutral",
+      helper: error
+        ? error
+        : isLoading
+          ? "Loading from your workspace"
+          : "from your workspace",
+    },
+    {
+      id: "tickets",
+      label: "Open Tickets",
+      value: "Not available",
+      change: "—",
+      trend: "neutral",
+      helper: "No tickets backend yet",
+    },
+    {
+      id: "ai-rate",
+      label: "AI Resolution Rate",
+      value: "Not available",
+      change: "—",
+      trend: "neutral",
+      helper: "No resolution-rate metric yet",
+    },
+    {
+      id: "csat",
+      label: "CSAT",
+      value: "Not available",
+      change: "—",
+      trend: "neutral",
+      helper: "No CSAT backend yet",
+    },
+  ]
+
   return (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-      {dashboardKpis.map((metric, index) => (
+      {metrics.map((metric, index) => (
         <KpiCard
           key={metric.id}
           metric={metric}

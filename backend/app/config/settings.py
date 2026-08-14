@@ -67,9 +67,24 @@ class Settings(BaseSettings):
         default="supportflow_knowledge",
         alias="CHROMA_COLLECTION",
     )
+    chroma_mode: str = Field(default="http", alias="CHROMA_MODE")
+    chroma_persist_directory: str = Field(
+        default=".chroma",
+        alias="CHROMA_PERSIST_DIRECTORY",
+    )
+    # default = Chroma DefaultEmbeddingFunction (all-MiniLM-L6-v2)
+    # hash = deterministic local vectors for tests / offline
+    chroma_embedding_model: str = Field(
+        default="default",
+        alias="CHROMA_EMBEDDING_MODEL",
+    )
 
-    # Google Gemini
+    # Google Gemini (generation only — embeddings remain MiniLM via Chroma)
     google_api_key: str = Field(default="", alias="GOOGLE_API_KEY")
+    gemini_model: str = Field(
+        default="gemini-3.5-flash-lite",
+        alias="GEMINI_MODEL",
+    )
 
     # Logging
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")

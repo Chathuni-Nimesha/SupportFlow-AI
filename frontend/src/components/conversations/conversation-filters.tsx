@@ -9,7 +9,7 @@ import {
 import type { LucideIcon } from "lucide-react"
 
 import {
-  conversationFilters,
+  conversationFilterDefs,
   type ConversationFilter,
 } from "@/data/conversations"
 import { Input } from "@/components/ui/input"
@@ -26,6 +26,7 @@ const filterIcons: Record<ConversationFilter, LucideIcon> = {
 type ConversationFiltersProps = {
   activeFilter: ConversationFilter
   search: string
+  counts: Record<ConversationFilter, number>
   onFilterChange: (filter: ConversationFilter) => void
   onSearchChange: (value: string) => void
   className?: string
@@ -34,6 +35,7 @@ type ConversationFiltersProps = {
 export function ConversationFilters({
   activeFilter,
   search,
+  counts,
   onFilterChange,
   onSearchChange,
   className,
@@ -69,7 +71,7 @@ export function ConversationFilters({
           Filters
         </p>
         <nav aria-label="Conversation filters" className="space-y-1">
-          {conversationFilters.map((filter) => {
+          {conversationFilterDefs.map((filter) => {
             const Icon = filterIcons[filter.id]
             const active = activeFilter === filter.id
             return (
@@ -94,7 +96,7 @@ export function ConversationFilters({
                       : "bg-muted text-muted-foreground",
                   )}
                 >
-                  {filter.count}
+                  {counts[filter.id] ?? 0}
                 </span>
               </button>
             )

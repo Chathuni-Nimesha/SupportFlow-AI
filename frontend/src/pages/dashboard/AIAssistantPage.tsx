@@ -1,5 +1,5 @@
-import { DashboardPlaceholderPage } from "@/pages/dashboard/DashboardPlaceholderPage"
+import { AiAssistantBoard } from "@/components/ai-assistant"
 
 export function AIAssistantPage() {
-  return <DashboardPlaceholderPage title="AI Assistant" />
+  return <AiAssistantBoard />
 }

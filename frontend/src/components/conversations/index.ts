@@ -3,6 +3,7 @@ export { ConversationDetail } from "@/components/conversations/conversation-deta
 export { ConversationFilters } from "@/components/conversations/conversation-filters"
 export { ConversationList } from "@/components/conversations/conversation-list"
 export { ConversationListItem } from "@/components/conversations/conversation-list-item"
+export { NewConversationForm } from "@/components/conversations/new-conversation-form"
 export { ConversationsInbox } from "@/components/conversations/conversations-inbox"
 export { MessageBubble } from "@/components/conversations/message-bubble"
 export { ReplyComposer } from "@/components/conversations/reply-composer"

@@ -3,6 +3,7 @@ import { motion } from "framer-motion"
 import { Bot, Plus, Upload } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { useAuth } from "@/context/auth-provider"
 
 function formatToday() {
   return new Intl.DateTimeFormat("en-US", {
@@ -13,11 +14,11 @@ function formatToday() {
   }).format(new Date())
 }
 
-type WelcomeHeaderProps = {
-  name?: string
-}
+export function WelcomeHeader() {
+  const { user } = useAuth()
+  const firstName = user?.first_name?.trim()
+  const heading = firstName ? `Welcome back, ${firstName}` : "Welcome back"
 
-export function WelcomeHeader({ name = "Maya" }: WelcomeHeaderProps) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
@@ -30,11 +31,10 @@ export function WelcomeHeader({ name = "Maya" }: WelcomeHeaderProps) {
           {formatToday()}
         </p>
         <h1 className="mt-1 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-          Welcome back, {name}
+          {heading}
         </h1>
         <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
-          Your AI agent is healthy. Review today’s workload, trends, and
-          escalations at a glance.
+          Review conversations and knowledge in your workspace.
         </p>
       </div>
 

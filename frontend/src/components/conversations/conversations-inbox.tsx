@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { PanelRightOpen, SlidersHorizontal } from "lucide-react"
 
@@ -7,10 +7,33 @@ import { ConversationDetail } from "@/components/conversations/conversation-deta
 import { ConversationFilters } from "@/components/conversations/conversation-filters"
 import { ConversationList } from "@/components/conversations/conversation-list"
 import {
-  conversations as conversationData,
-  type Conversation,
-  type ConversationFilter,
-} from "@/data/conversations"
+  emptyNewConversationValues,
+  NewConversationForm,
+  toConversationCreatePayload,
+  validateNewConversationValues,
+  type NewConversationFormValues,
+} from "@/components/conversations/new-conversation-form"
+import { conversationFilterDefs } from "@/data/conversations"
+import type {
+  Conversation,
+  ConversationFilter,
+  ConversationStatus,
+} from "@/types/conversations"
+import {
+  formatRelativeTime,
+  mapConversationFromApi,
+  mapMessageFromApi,
+  mergeConversationUpdate,
+  statusToFilterTags,
+} from "@/lib/conversation-mappers"
+import {
+  createConversation,
+  getConversation,
+  listConversationMessages,
+  listConversations,
+  sendConversationMessage,
+  updateConversation,
+} from "@/services/conversations"
 import { Button } from "@/components/ui/button"
 import {
   Sheet,
@@ -18,6 +41,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
+import { getApiErrorMessage } from "@/utils/api-error"
 import { cn } from "@/lib/utils"
 
 function filterConversations(
@@ -37,62 +61,264 @@ function filterConversations(
       query.length === 0 ||
       item.customerName.toLowerCase().includes(query) ||
       item.lastMessage.toLowerCase().includes(query) ||
-      item.customerEmail.toLowerCase().includes(query)
+      item.customerEmail.toLowerCase().includes(query) ||
+      item.subject.toLowerCase().includes(query)
 
     return matchesFilter && matchesSearch
   })
 }
 
+function buildFilterCounts(
+  items: Conversation[],
+): Record<ConversationFilter, number> {
+  const counts = Object.fromEntries(
+    conversationFilterDefs.map((filter) => [filter.id, 0]),
+  ) as Record<ConversationFilter, number>
+
+  for (const item of items) {
+    for (const tag of item.filterTags) {
+      counts[tag] += 1
+    }
+  }
+
+  return counts
+}
+
 export function ConversationsInbox() {
   const [filter, setFilter] = useState<ConversationFilter>("inbox")
   const [search, setSearch] = useState("")
-  const [items, setItems] = useState(conversationData)
-  const [activeId, setActiveId] = useState(conversationData[0]?.id ?? null)
+  const [items, setItems] = useState<Conversation[]>([])
+  const [activeId, setActiveId] = useState<string | null>(null)
   const [draft, setDraft] = useState("")
   const [mobileView, setMobileView] = useState<"list" | "detail">("list")
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [aiOpen, setAiOpen] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
   const [escalated, setEscalated] = useState(false)
+
+  const [listLoading, setListLoading] = useState(true)
+  const [listError, setListError] = useState<string | null>(null)
+  const [messagesLoading, setMessagesLoading] = useState(false)
+  const [messagesError, setMessagesError] = useState<string | null>(null)
+  const [sending, setSending] = useState(false)
+  const [sendError, setSendError] = useState<string | null>(null)
+  const [updatingStatus, setUpdatingStatus] = useState(false)
+  const [createValues, setCreateValues] = useState<NewConversationFormValues>(
+    emptyNewConversationValues(),
+  )
+  const [createError, setCreateError] = useState<string | null>(null)
+  const [isCreating, setIsCreating] = useState(false)
 
   const filtered = useMemo(
     () => filterConversations(items, filter, search),
     [items, filter, search],
   )
 
+  const filterCounts = useMemo(() => buildFilterCounts(items), [items])
+
   const activeConversation =
-    filtered.find((item) => item.id === activeId) ?? filtered[0] ?? null
+    items.find((item) => item.id === activeId) ??
+    filtered.find((item) => item.id === activeId) ??
+    null
+
+  const loadConversations = useCallback(async () => {
+    setListLoading(true)
+    setListError(null)
+    try {
+      const data = await listConversations()
+      const mapped = data.map((item) => mapConversationFromApi(item))
+      setItems(mapped)
+      setActiveId((current) => {
+        if (current && mapped.some((item) => item.id === current)) {
+          return current
+        }
+        return mapped[0]?.id ?? null
+      })
+    } catch (error) {
+      setListError(
+        getApiErrorMessage(error, "Unable to load conversations."),
+      )
+      setItems([])
+      setActiveId(null)
+    } finally {
+      setListLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadConversations()
+  }, [loadConversations])
+
+  const loadConversationDetail = useCallback(async (conversationId: string) => {
+    setMessagesLoading(true)
+    setMessagesError(null)
+    setSendError(null)
+
+    try {
+      const [detail, messages] = await Promise.all([
+        getConversation(conversationId),
+        listConversationMessages(conversationId),
+      ])
+
+      const mappedMessages = messages.map(mapMessageFromApi)
+
+      setItems((current) =>
+        current.map((item) =>
+          item.id === conversationId
+            ? mapConversationFromApi(detail, mappedMessages)
+            : item,
+        ),
+      )
+
+      if (detail.unread_count > 0) {
+        try {
+          const cleared = await updateConversation(conversationId, {
+            unread_count: 0,
+          })
+          setItems((current) =>
+            current.map((item) =>
+              item.id === conversationId
+                ? mergeConversationUpdate(
+                    {
+                      ...item,
+                      messages: mappedMessages,
+                    },
+                    cleared,
+                  )
+                : item,
+            ),
+          )
+        } catch {
+          // Non-blocking: message load succeeded even if unread clear failed.
+        }
+      }
+    } catch (error) {
+      setMessagesError(
+        getApiErrorMessage(error, "Unable to load conversation messages."),
+      )
+    } finally {
+      setMessagesLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!activeId) return
+    void loadConversationDetail(activeId)
+  }, [activeId, loadConversationDetail])
 
   const selectConversation = (id: string) => {
     setActiveId(id)
     setDraft("")
     setEscalated(false)
+    setSendError(null)
     setMobileView("detail")
   }
 
-  const handleSend = (value: string) => {
-    if (!activeConversation) return
+  const openCreate = () => {
+    setCreateValues(emptyNewConversationValues())
+    setCreateError(null)
+    setCreateOpen(true)
+  }
 
-    const nextMessage = {
-      id: `local-${Date.now()}`,
-      sender: "agent" as const,
-      content: value,
-      timestamp: "Just now",
+  const closeCreate = () => {
+    if (isCreating) return
+    setCreateOpen(false)
+    setCreateError(null)
+    setCreateValues(emptyNewConversationValues())
+  }
+
+  const handleCreate = async () => {
+    const validationError = validateNewConversationValues(createValues)
+    if (validationError) {
+      setCreateError(validationError)
+      return
     }
 
-    setItems((current) =>
-      current.map((item) =>
-        item.id === activeConversation.id
-          ? {
-              ...item,
-              lastMessage: value,
-              time: "Just now",
-              unread: 0,
-              messages: [...item.messages, nextMessage],
-            }
-          : item,
-      ),
-    )
-    setDraft("")
+    setIsCreating(true)
+    setCreateError(null)
+    try {
+      const created = await createConversation(
+        toConversationCreatePayload(createValues),
+      )
+      const mapped = mapConversationFromApi(created)
+      setItems((current) => [
+        mapped,
+        ...current.filter((item) => item.id !== mapped.id),
+      ])
+      setFilter("inbox")
+      setSearch("")
+      setCreateOpen(false)
+      setCreateValues(emptyNewConversationValues())
+      selectConversation(mapped.id)
+    } catch (error) {
+      setCreateError(
+        getApiErrorMessage(error, "Unable to create conversation."),
+      )
+    } finally {
+      setIsCreating(false)
+    }
+  }
+
+  const handleSend = async (value: string) => {
+    if (!activeConversation) return
+
+    setSending(true)
+    setSendError(null)
+    try {
+      const created = await sendConversationMessage(activeConversation.id, {
+        content: value,
+        sender_type: "agent",
+      })
+      const mapped = mapMessageFromApi(created)
+
+      setItems((current) =>
+        current.map((item) =>
+          item.id === activeConversation.id
+            ? {
+                ...item,
+                lastMessage: mapped.content,
+                time: formatRelativeTime(mapped.createdAt),
+                updatedAt: mapped.createdAt,
+                unread: 0,
+                messages: [...item.messages, mapped],
+              }
+            : item,
+        ),
+      )
+      setDraft("")
+    } catch (error) {
+      setSendError(getApiErrorMessage(error, "Unable to send message."))
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const handleStatusChange = async (status: ConversationStatus) => {
+    if (!activeConversation || activeConversation.status === status) return
+
+    setUpdatingStatus(true)
+    try {
+      const updated = await updateConversation(activeConversation.id, {
+        status,
+      })
+      setItems((current) =>
+        current.map((item) =>
+          item.id === activeConversation.id
+            ? {
+                ...mergeConversationUpdate(item, updated),
+                filterTags: statusToFilterTags(status),
+                messages: item.messages,
+              }
+            : item,
+        ),
+      )
+    } catch (error) {
+      setSendError(
+        getApiErrorMessage(error, "Unable to update conversation status."),
+      )
+    } finally {
+      setUpdatingStatus(false)
+    }
   }
 
   return (
@@ -127,11 +353,27 @@ export function ConversationsInbox() {
         </div>
       ) : null}
 
+      {listError ? (
+        <div className="flex items-center justify-between gap-3 border-b border-rose-200 bg-rose-50 px-4 py-2 text-xs text-rose-800 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-200">
+          <span>{listError}</span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 rounded-lg"
+            onClick={() => void loadConversations()}
+          >
+            Retry
+          </Button>
+        </div>
+      ) : null}
+
       <div className="flex min-h-0 flex-1">
         <div className="hidden h-full w-60 shrink-0 xl:block 2xl:w-64">
           <ConversationFilters
             activeFilter={filter}
             search={search}
+            counts={filterCounts}
             onFilterChange={setFilter}
             onSearchChange={setSearch}
             className="h-full"
@@ -148,6 +390,9 @@ export function ConversationsInbox() {
             conversations={filtered}
             activeId={activeConversation?.id ?? null}
             onSelect={selectConversation}
+            onCreate={openCreate}
+            isLoading={listLoading}
+            error={listError}
             className="h-full"
           />
         </div>
@@ -172,7 +417,13 @@ export function ConversationsInbox() {
                 draft={draft}
                 onDraftChange={setDraft}
                 onSend={handleSend}
+                onStatusChange={handleStatusChange}
                 onBack={() => setMobileView("list")}
+                isMessagesLoading={messagesLoading}
+                messagesError={messagesError}
+                sendError={sendError}
+                isSending={sending}
+                isUpdatingStatus={updatingStatus}
                 className="h-full"
               />
             </motion.div>
@@ -189,6 +440,32 @@ export function ConversationsInbox() {
         </div>
       </div>
 
+      <Sheet
+        open={createOpen}
+        onOpenChange={(open) => {
+          if (!open && !isCreating) {
+            closeCreate()
+          }
+        }}
+      >
+        <SheetContent
+          side="right"
+          className="flex w-full flex-col gap-0 p-0 sm:max-w-xl"
+        >
+          <SheetHeader className="border-b border-border/70 px-4 py-4 text-left">
+            <SheetTitle>New conversation</SheetTitle>
+          </SheetHeader>
+          <NewConversationForm
+            values={createValues}
+            onChange={setCreateValues}
+            onSubmit={() => void handleCreate()}
+            onCancel={closeCreate}
+            isSaving={isCreating}
+            error={createError}
+          />
+        </SheetContent>
+      </Sheet>
+
       <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
         <SheetContent side="left" className="w-[min(100%,20rem)] p-0">
           <SheetHeader className="sr-only">
@@ -197,6 +474,7 @@ export function ConversationsInbox() {
           <ConversationFilters
             activeFilter={filter}
             search={search}
+            counts={filterCounts}
             onFilterChange={(next) => {
               setFilter(next)
               setFiltersOpen(false)

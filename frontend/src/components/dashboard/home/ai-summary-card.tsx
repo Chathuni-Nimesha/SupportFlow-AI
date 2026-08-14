@@ -1,7 +1,6 @@
 import { motion } from "framer-motion"
 import { Bot, Clock3, ShieldAlert } from "lucide-react"
 
-import { aiSummary } from "@/data/dashboard-home"
 import {
   Card,
   CardContent,
@@ -9,22 +8,18 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { Progress } from "@/components/ui/progress"
 
 const stats = [
   {
     label: "AI handled today",
-    value: String(aiSummary.handledToday),
     icon: Bot,
   },
   {
     label: "Escalated",
-    value: String(aiSummary.escalated),
     icon: ShieldAlert,
   },
   {
     label: "Avg. response time",
-    value: aiSummary.avgResponseTime,
     icon: Clock3,
   },
 ]
@@ -58,8 +53,8 @@ export function AiSummaryCard() {
                     </span>
                     <p className="text-sm text-muted-foreground">{stat.label}</p>
                   </div>
-                  <p className="text-base font-semibold text-foreground">
-                    {stat.value}
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Not available
                   </p>
                 </div>
               )
@@ -71,13 +66,12 @@ export function AiSummaryCard() {
               <span className="font-medium text-foreground">
                 Automation coverage
               </span>
-              <span className="font-semibold text-primary">
-                {aiSummary.automationCoverage}%
+              <span className="font-medium text-muted-foreground">
+                Not available
               </span>
             </div>
-            <Progress value={aiSummary.automationCoverage} className="h-2" />
-            <p className="mt-2 text-xs text-muted-foreground">
-              Share of conversations closed without human intervention.
+            <p className="text-xs text-muted-foreground">
+              No automation-coverage metric is available from the backend yet.
             </p>
           </div>
         </CardContent>

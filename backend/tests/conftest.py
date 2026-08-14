@@ -13,15 +13,20 @@ os.environ["JWT_ALGORITHM"] = "HS256"
 os.environ["JWT_EXPIRE_MINUTES"] = "60"
 os.environ["MONGODB_URL"] = "mongodb://localhost:27017"
 os.environ["MONGODB_DATABASE"] = "supportflow_test"
+os.environ["CHROMA_MODE"] = "ephemeral"
+os.environ["CHROMA_EMBEDDING_MODEL"] = "hash"
+os.environ["CHROMA_COLLECTION"] = "supportflow_knowledge_test"
 
 
 @pytest.fixture
 async def client() -> AsyncIterator[AsyncClient]:
     from app.config.settings import get_settings
+    from app.database import chroma as chroma_module
     from app.database import mongodb as mongodb_module
     from main import app
 
     get_settings.cache_clear()
+    chroma_module.reset_chroma_client()
 
     mock_client = AsyncMongoMockClient()
     mock_db = mock_client["supportflow_test"]
@@ -53,6 +58,7 @@ async def client() -> AsyncIterator[AsyncClient]:
 
     mongodb_module._client = None
     mongodb_module._database = None
+    chroma_module.reset_chroma_client()
     get_settings.cache_clear()
 
 
@@ -65,3 +71,21 @@ def sample_register_payload() -> dict:
         "email": "maya@acme.example",
         "password": "securepass123",
     }
+
+
+@pytest.fixture
+async def auth_headers(
+    client: AsyncClient,
+    sample_register_payload: dict,
+) -> dict[str, str]:
+    """Register + login and return Authorization headers for protected routes."""
+    await client.post("/api/v1/auth/register", json=sample_register_payload)
+    login = await client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": sample_register_payload["email"],
+            "password": sample_register_payload["password"],
+        },
+    )
+    token = login.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}

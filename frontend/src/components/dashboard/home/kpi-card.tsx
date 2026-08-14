@@ -36,7 +36,13 @@ export function KpiCard({ metric, icon: Icon, index = 0 }: KpiCardProps) {
               <p className="text-sm font-medium text-muted-foreground">
                 {metric.label}
               </p>
-              <p className="mt-2 text-3xl font-semibold tracking-tight text-foreground">
+              <p
+                className={
+                  metric.value === "Not available"
+                    ? "mt-2 text-lg font-semibold tracking-tight text-muted-foreground"
+                    : "mt-2 text-3xl font-semibold tracking-tight text-foreground"
+                }
+              >
                 {metric.value}
               </p>
             </div>
