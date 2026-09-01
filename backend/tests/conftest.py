@@ -34,6 +34,14 @@ async def client() -> AsyncIterator[AsyncClient]:
     mock_client = AsyncMongoMockClient()
     mock_db = mock_client["supportflow_test"]
     await mock_db.users.create_index("email", unique=True)
+    await mock_db.customers.create_index(
+        [("owner_id", 1), ("email", 1)],
+        unique=True,
+    )
+    await mock_db.team_members.create_index(
+        [("owner_id", 1), ("email", 1)],
+        unique=True,
+    )
 
     mongodb_module._client = mock_client
     mongodb_module._database = mock_db

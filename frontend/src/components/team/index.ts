@@ -1,3 +1,4 @@
-export { CurrentUserCard } from "@/components/team/current-user-card"
 export { TeamBoard } from "@/components/team/team-board"
-export { TeamUnavailable } from "@/components/team/team-unavailable"
+export { TeamList } from "@/components/team/team-list"
+export { TeamForm } from "@/components/team/team-form"
+export { TeamDetailPanel } from "@/components/team/team-detail"

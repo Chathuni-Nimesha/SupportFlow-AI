@@ -19,18 +19,30 @@ type KpiCardsProps = {
   conversationCount: number
   isLoading?: boolean
   error?: string | null
+  openTicketCount: number
+  ticketsLoading?: boolean
+  ticketsError?: string | null
 }
 
 export function KpiCards({
   conversationCount,
   isLoading = false,
   error = null,
+  openTicketCount,
+  ticketsLoading = false,
+  ticketsError = null,
 }: KpiCardsProps) {
   const conversationValue = isLoading
     ? "…"
     : error
       ? "—"
       : conversationCount.toLocaleString()
+
+  const ticketValue = ticketsLoading
+    ? "…"
+    : ticketsError
+      ? "—"
+      : openTicketCount.toLocaleString()
 
   const metrics: KpiMetric[] = [
     {
@@ -48,10 +60,14 @@ export function KpiCards({
     {
       id: "tickets",
       label: "Open Tickets",
-      value: "Not available",
-      change: "—",
+      value: ticketValue,
+      change: ticketsError ? "Error" : ticketsLoading ? "Loading" : "Live",
       trend: "neutral",
-      helper: "No tickets backend yet",
+      helper: ticketsError
+        ? ticketsError
+        : ticketsLoading
+          ? "Loading from your workspace"
+          : "OPEN tickets in your workspace",
     },
     {
       id: "ai-rate",

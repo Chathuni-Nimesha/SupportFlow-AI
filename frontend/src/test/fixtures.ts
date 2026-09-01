@@ -1,4 +1,7 @@
 import type { AiAnswer } from "@/types/ai"
+import type { Customer, CustomerDetail } from "@/types/customers"
+import type { TeamMember } from "@/types/team"
+import type { Ticket } from "@/types/tickets"
 import type { AuthTokenResponse, AuthUser } from "@/types/auth"
 import type {
   Conversation,
@@ -94,6 +97,83 @@ export function makeUiMessage(
     createdAt: "2026-08-20T12:00:00.000Z",
     ...overrides,
   }
+}
+
+export function makeCustomer(overrides: Partial<Customer> = {}): Customer {
+  return {
+    id: "cust-1",
+    owner_id: "user-1",
+    first_name: "Elena",
+    last_name: "Park",
+    email: "elena@acme.example",
+    phone: "+1-555-0100",
+    company: "Harbor Retail",
+    notes: "Prefers email follow-up.",
+    created_at: "2026-08-20T12:00:00.000Z",
+    updated_at: "2026-08-20T12:00:00.000Z",
+    ...overrides,
+  }
+}
+
+export function makeCustomerDetail(
+  overrides: Partial<CustomerDetail> = {},
+): CustomerDetail {
+  const { conversations, ...customerOverrides } = overrides
+  return {
+    ...makeCustomer(customerOverrides),
+    conversations: conversations ?? [],
+  }
+}
+
+export function makeTicket(overrides: Partial<Ticket> = {}): Ticket {
+  return {
+    id: "tkt-1",
+    owner_id: "user-1",
+    customer_id: "cust-1",
+    title: "Refund not received",
+    description: "Customer paid twice and needs the duplicate charge reversed.",
+    status: "OPEN",
+    priority: "HIGH",
+    assignee_id: null,
+    created_at: "2026-08-20T12:00:00.000Z",
+    updated_at: "2026-08-20T12:00:00.000Z",
+    customer: {
+      id: "cust-1",
+      first_name: "Elena",
+      last_name: "Park",
+      email: "elena@acme.example",
+    },
+    assignee: null,
+    ...overrides,
+  }
+}
+
+export function makeTeamMember(overrides: Partial<TeamMember> = {}): TeamMember {
+  return {
+    id: "member-1",
+    owner_id: "user-1",
+    user_id: null,
+    first_name: "Sarah",
+    last_name: "Perera",
+    email: "sarah@acme.example",
+    role: "AGENT",
+    status: "ACTIVE",
+    created_at: "2026-08-20T12:00:00.000Z",
+    updated_at: "2026-08-20T12:00:00.000Z",
+    ...overrides,
+  }
+}
+
+export function makeOwnerMember(overrides: Partial<TeamMember> = {}): TeamMember {
+  return makeTeamMember({
+    id: "user-1",
+    user_id: "user-1",
+    first_name: "Ava",
+    last_name: "Chen",
+    email: "ava@acme.example",
+    role: "OWNER",
+    ...overrides,
+  })
 }
 
 export function makeKnowledgeDocument(

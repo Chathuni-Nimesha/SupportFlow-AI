@@ -1,23 +1,424 @@
-import { describe, expect, it } from "vitest"
-import { screen } from "@testing-library/react"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import userEvent from "@testing-library/user-event"
+import { screen, waitFor, within } from "@testing-library/react"
 
 import { TicketsBoard } from "@/components/tickets/tickets-board"
-import { renderWithProviders } from "@/test/test-utils"
+import { listCustomers } from "@/services/customers"
+import { listTeamMembers } from "@/services/team"
+import {
+  createTicket,
+  deleteTicket,
+  getTicket,
+  listTickets,
+  updateTicket,
+} from "@/services/tickets"
+import { makeCustomer, makeOwnerMember, makeTeamMember, makeTicket } from "@/test/fixtures"
+import { deferred, renderWithProviders } from "@/test/test-utils"
+
+vi.mock("@/services/customers", () => ({
+  listCustomers: vi.fn(),
+  getCustomer: vi.fn(),
+  createCustomer: vi.fn(),
+  updateCustomer: vi.fn(),
+  deleteCustomer: vi.fn(),
+}))
+
+vi.mock("@/services/tickets", () => ({
+  listTickets: vi.fn(),
+  getTicket: vi.fn(),
+  createTicket: vi.fn(),
+  updateTicket: vi.fn(),
+  deleteTicket: vi.fn(),
+}))
+
+vi.mock("@/services/team", () => ({
+  listTeamMembers: vi.fn(),
+  getTeamMember: vi.fn(),
+  createTeamMember: vi.fn(),
+  updateTeamMember: vi.fn(),
+  deleteTeamMember: vi.fn(),
+}))
 
 describe("TicketsBoard", () => {
-  it("renders an honest unavailable state without fake ticket rows", () => {
+  beforeEach(() => {
+    vi.mocked(listTickets).mockReset()
+    vi.mocked(getTicket).mockReset()
+    vi.mocked(createTicket).mockReset()
+    vi.mocked(updateTicket).mockReset()
+    vi.mocked(deleteTicket).mockReset()
+    vi.mocked(listCustomers).mockReset()
+    vi.mocked(listCustomers).mockResolvedValue([makeCustomer()])
+    vi.mocked(listTeamMembers).mockReset()
+    vi.mocked(listTeamMembers).mockResolvedValue([
+      makeOwnerMember(),
+      makeTeamMember(),
+    ])
+  })
+
+  it("renders the tickets board chrome", async () => {
+    vi.mocked(listTickets).mockResolvedValue([])
+
     renderWithProviders(<TicketsBoard />)
 
-    expect(screen.getByRole("heading", { name: "Tickets" })).toBeInTheDocument()
     expect(
-      screen.getByText(
-        "Tickets are not available yet. There is no tickets backend connected.",
-      ),
+      await screen.findByRole("heading", { name: "Tickets" }),
     ).toBeInTheDocument()
-    expect(screen.getAllByText("Not available").length).toBeGreaterThanOrEqual(4)
-    expect(screen.getByRole("button", { name: "Create ticket" })).toBeDisabled()
-    expect(screen.getByLabelText("Search tickets")).toBeDisabled()
-    expect(screen.queryByRole("table")).not.toBeInTheDocument()
-    expect(screen.queryByText("TKT-")).not.toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: "New ticket" }),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText("Search tickets")).toBeInTheDocument()
+    expect(screen.getByLabelText("Filter by status")).toBeInTheDocument()
+    expect(screen.queryByText("Not available")).not.toBeInTheDocument()
+  })
+
+  it("shows a loading state while tickets are fetched", async () => {
+    const pending = deferred<ReturnType<typeof makeTicket>[]>()
+    vi.mocked(listTickets).mockReturnValue(pending.promise)
+
+    renderWithProviders(<TicketsBoard />)
+
+    expect(await screen.findByText("Loading tickets…")).toBeInTheDocument()
+
+    pending.resolve([])
+    expect(await screen.findByText("No tickets yet")).toBeInTheDocument()
+  })
+
+  it("shows an empty state when there are no tickets", async () => {
+    vi.mocked(listTickets).mockResolvedValue([])
+
+    renderWithProviders(<TicketsBoard />)
+
+    expect(await screen.findByText("No tickets yet")).toBeInTheDocument()
+    expect(screen.queryByText("Refund not received")).not.toBeInTheDocument()
+  })
+
+  it("renders tickets from the API", async () => {
+    vi.mocked(listTickets).mockResolvedValue([makeTicket()])
+
+    renderWithProviders(<TicketsBoard />)
+
+    expect(await screen.findByText("Refund not received")).toBeInTheDocument()
+    expect(screen.getByText(/Elena Park/)).toBeInTheDocument()
+  })
+
+  it("shows a list error and retries", async () => {
+    const user = userEvent.setup()
+    vi.mocked(listTickets)
+      .mockRejectedValueOnce(new Error("Unable to load tickets."))
+      .mockResolvedValueOnce([makeTicket()])
+
+    renderWithProviders(<TicketsBoard />)
+
+    expect(await screen.findByText("Couldn’t load tickets")).toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: "Retry" }))
+
+    expect(await screen.findByText("Refund not received")).toBeInTheDocument()
+    expect(listTickets).toHaveBeenCalledTimes(2)
+  })
+
+  it(
+    "creates a ticket and shows it in the list",
+    async () => {
+    const user = userEvent.setup()
+    vi.mocked(listTickets).mockResolvedValue([])
+    const created = makeTicket({ id: "tkt-created" })
+    vi.mocked(createTicket).mockImplementation(async () => {
+      vi.mocked(listTickets).mockResolvedValue([created])
+      return created
+    })
+
+    renderWithProviders(<TicketsBoard />)
+    await screen.findByText("No tickets yet")
+
+    await user.click(screen.getByRole("button", { name: "New ticket" }))
+    expect(
+      await screen.findByRole("heading", { name: "New ticket" }),
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByRole("option", { name: /Elena Park/ }),
+    ).toBeInTheDocument()
+
+    await user.selectOptions(screen.getByLabelText("Customer"), "cust-1")
+    await user.type(screen.getByLabelText("Title"), "Refund not received")
+    await user.type(screen.getByLabelText("Description"), "Paid twice")
+    await user.click(screen.getByRole("button", { name: "Create ticket" }))
+
+    await waitFor(() => {
+      expect(createTicket).toHaveBeenCalledWith({
+        customer_id: "cust-1",
+        title: "Refund not received",
+        description: "Paid twice",
+        status: "OPEN",
+        priority: "MEDIUM",
+        assignee_id: null,
+      })
+    })
+    expect(await screen.findByText("Refund not received")).toBeInTheDocument()
+    },
+    10_000,
+  )
+
+  it("validates required fields before creating", async () => {
+    const user = userEvent.setup()
+    vi.mocked(listTickets).mockResolvedValue([])
+
+    renderWithProviders(<TicketsBoard />)
+    await user.click(await screen.findByRole("button", { name: "New ticket" }))
+    await screen.findByRole("heading", { name: "New ticket" })
+
+    await user.click(screen.getByRole("button", { name: "Create ticket" }))
+
+    expect(await screen.findByText("Select a customer.")).toBeInTheDocument()
+    expect(createTicket).not.toHaveBeenCalled()
+  })
+
+  it("opens ticket details", async () => {
+    const user = userEvent.setup()
+    const ticket = makeTicket()
+    vi.mocked(listTickets).mockResolvedValue([ticket])
+    vi.mocked(getTicket).mockResolvedValue(ticket)
+
+    renderWithProviders(<TicketsBoard />)
+    await screen.findByText("Refund not received")
+
+    await user.click(
+      screen.getByRole("button", { name: "View Refund not received" }),
+    )
+
+    const dialog = await screen.findByRole("dialog")
+    expect(
+      await within(dialog).findByText("Refund not received"),
+    ).toBeInTheDocument()
+    expect(within(dialog).getByText(/Elena Park/)).toBeInTheDocument()
+    expect(
+      within(dialog).getByRole("link", { name: "View customer" }),
+    ).toHaveAttribute("href", "/dashboard/customers")
+  })
+
+  it("populates the edit form and saves changes", async () => {
+    const user = userEvent.setup()
+    const ticket = makeTicket()
+    vi.mocked(listTickets).mockResolvedValue([ticket])
+    const updated = makeTicket({ title: "Duplicate charge" })
+    vi.mocked(updateTicket).mockImplementation(async () => {
+      vi.mocked(listTickets).mockResolvedValue([updated])
+      return updated
+    })
+
+    renderWithProviders(<TicketsBoard />)
+    await user.click(
+      await screen.findByRole("button", { name: "Edit Refund not received" }),
+    )
+
+    expect(
+      await screen.findByRole("heading", { name: "Edit ticket" }),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText("Title")).toHaveValue("Refund not received")
+
+    await user.clear(screen.getByLabelText("Title"))
+    await user.type(screen.getByLabelText("Title"), "Duplicate charge")
+    await user.click(screen.getByRole("button", { name: "Save changes" }))
+
+    await waitFor(() => {
+      expect(updateTicket).toHaveBeenCalledWith(
+        "tkt-1",
+        expect.objectContaining({ title: "Duplicate charge" }),
+      )
+    })
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("heading", { name: "Edit ticket" }),
+      ).not.toBeInTheDocument()
+    })
+  })
+
+  it("changes status from ticket details", async () => {
+    const user = userEvent.setup()
+    const ticket = makeTicket()
+    vi.mocked(listTickets).mockResolvedValue([ticket])
+    vi.mocked(getTicket).mockResolvedValue(ticket)
+    vi.mocked(updateTicket).mockResolvedValue(
+      makeTicket({ status: "IN_PROGRESS" }),
+    )
+
+    renderWithProviders(<TicketsBoard />)
+    await user.click(
+      await screen.findByRole("button", { name: "View Refund not received" }),
+    )
+
+    const dialog = await screen.findByRole("dialog")
+    const status = await within(dialog).findByLabelText("Status")
+    await user.selectOptions(status, "IN_PROGRESS")
+
+    await waitFor(() => {
+      expect(updateTicket).toHaveBeenCalledWith("tkt-1", {
+        status: "IN_PROGRESS",
+      })
+    })
+  })
+
+  it("confirms deletion and removes the ticket from the list", async () => {
+    const user = userEvent.setup()
+    vi.mocked(listTickets).mockResolvedValue([makeTicket()])
+    vi.mocked(deleteTicket).mockImplementation(async () => {
+      vi.mocked(listTickets).mockResolvedValue([])
+    })
+
+    renderWithProviders(<TicketsBoard />)
+    await screen.findByText("Refund not received")
+
+    await user.click(
+      screen.getByRole("button", { name: "Delete Refund not received" }),
+    )
+    expect(await screen.findByText(/This cannot be undone/)).toBeInTheDocument()
+    expect(
+      screen.getByRole("heading", { name: "Delete ticket" }),
+    ).toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: "Delete" }))
+
+    await waitFor(() => {
+      expect(deleteTicket).toHaveBeenCalledWith("tkt-1")
+    })
+    expect(await screen.findByText("No tickets yet")).toBeInTheDocument()
+  })
+
+  it("filters tickets by status through the API", async () => {
+    const user = userEvent.setup()
+    const open = makeTicket()
+    const resolved = makeTicket({
+      id: "tkt-2",
+      title: "Password reset",
+      status: "RESOLVED",
+    })
+    vi.mocked(listTickets).mockImplementation(async (params = {}) => {
+      if (params.status === "RESOLVED") return [resolved]
+      return [open, resolved]
+    })
+
+    renderWithProviders(<TicketsBoard />)
+    expect(await screen.findByText("Refund not received")).toBeInTheDocument()
+    expect(screen.getByText("Password reset")).toBeInTheDocument()
+
+    await user.selectOptions(screen.getByLabelText("Filter by status"), "RESOLVED")
+
+    await waitFor(() => {
+      expect(listTickets).toHaveBeenCalledWith(
+        expect.objectContaining({ status: "RESOLVED" }),
+      )
+    })
+    expect(await screen.findByText("Password reset")).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.queryByText("Refund not received")).not.toBeInTheDocument()
+    })
+  })
+
+  it("searches tickets through the API", async () => {
+    const user = userEvent.setup()
+    const refund = makeTicket()
+    vi.mocked(listTickets).mockImplementation(async (params = {}) => {
+      if (params.query === "duplicate") return [refund]
+      if (params.query) return []
+      return [refund, makeTicket({ id: "tkt-2", title: "Password reset" })]
+    })
+
+    renderWithProviders(<TicketsBoard />)
+    expect(await screen.findByText("Password reset")).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText("Search tickets"), "duplicate")
+
+    await waitFor(() => {
+      expect(listTickets).toHaveBeenCalledWith(
+        expect.objectContaining({ query: "duplicate" }),
+      )
+    })
+    expect(await screen.findByText("Refund not received")).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.queryByText("Password reset")).not.toBeInTheDocument()
+    })
+  })
+
+  it("loads real team members in the assignee selector", async () => {
+    const user = userEvent.setup()
+    vi.mocked(listTickets).mockResolvedValue([])
+
+    renderWithProviders(<TicketsBoard />)
+    await user.click(await screen.findByRole("button", { name: "New ticket" }))
+    await screen.findByRole("heading", { name: "New ticket" })
+
+    const assignee = await screen.findByRole("combobox", { name: "Assignee" })
+    expect(
+      await screen.findByRole("option", { name: "Ava Chen (Owner)" }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("option", { name: "Sarah Perera" }),
+    ).toBeInTheDocument()
+    expect(within(assignee).getByRole("option", { name: "Unassigned" })).toBeInTheDocument()
+    expect(screen.queryByText("Team members are not available yet.")).not.toBeInTheDocument()
+  })
+
+  it("assigns a ticket to a team member on create", async () => {
+    const user = userEvent.setup()
+    vi.mocked(listTickets).mockResolvedValue([])
+    const created = makeTicket({
+      id: "tkt-assigned",
+      assignee_id: "member-1",
+      assignee: {
+        id: "member-1",
+        first_name: "Sarah",
+        last_name: "Perera",
+        email: "sarah@acme.example",
+        role: "AGENT",
+      },
+    })
+    vi.mocked(createTicket).mockImplementation(async () => {
+      vi.mocked(listTickets).mockResolvedValue([created])
+      return created
+    })
+
+    renderWithProviders(<TicketsBoard />)
+    await user.click(await screen.findByRole("button", { name: "New ticket" }))
+    await screen.findByRole("heading", { name: "New ticket" })
+    await user.selectOptions(screen.getByLabelText("Customer"), "cust-1")
+    await user.type(screen.getByLabelText("Title"), "Refund not received")
+    await user.type(screen.getByLabelText("Description"), "Paid twice")
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Assignee" }),
+      "member-1",
+    )
+    await user.click(screen.getByRole("button", { name: "Create ticket" }))
+
+    await waitFor(() => {
+      expect(createTicket).toHaveBeenCalledWith(
+        expect.objectContaining({ assignee_id: "member-1" }),
+      )
+    })
+    expect(await screen.findByText("Sarah Perera")).toBeInTheDocument()
+  }, 10_000)
+
+  it("shows assigned member name on ticket details", async () => {
+    const user = userEvent.setup()
+    const ticket = makeTicket({
+      assignee_id: "member-1",
+      assignee: {
+        id: "member-1",
+        first_name: "Sarah",
+        last_name: "Perera",
+        email: "sarah@acme.example",
+        role: "AGENT",
+      },
+    })
+    vi.mocked(listTickets).mockResolvedValue([ticket])
+    vi.mocked(getTicket).mockResolvedValue(ticket)
+
+    renderWithProviders(<TicketsBoard />)
+    await user.click(
+      await screen.findByRole("button", { name: "View Refund not received" }),
+    )
+
+    const dialog = await screen.findByRole("dialog")
+    expect(within(dialog).getByText("Assigned to")).toBeInTheDocument()
+    expect(within(dialog).getAllByText("Sarah Perera").length).toBeGreaterThan(0)
   })
 })

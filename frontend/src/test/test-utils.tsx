@@ -1,4 +1,6 @@
 import type { ReactElement, ReactNode } from "react"
+import { useState } from "react"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { render, type RenderOptions } from "@testing-library/react"
 import { MemoryRouter } from "react-router-dom"
 
@@ -11,18 +13,31 @@ type ProvidersProps = {
   initialEntries?: string[]
 }
 
+function createTestQueryClient() {
+  return new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, gcTime: 0 },
+      mutations: { retry: 0 },
+    },
+  })
+}
+
 export function AppTestProviders({
   children,
   initialEntries = ["/"],
 }: ProvidersProps) {
+  const [queryClient] = useState(createTestQueryClient)
+
   return (
-    <ThemeProvider>
-      <TooltipProvider delayDuration={0}>
-        <MemoryRouter initialEntries={initialEntries}>
-          <AuthProvider>{children}</AuthProvider>
-        </MemoryRouter>
-      </TooltipProvider>
-    </ThemeProvider>
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <TooltipProvider delayDuration={0}>
+          <MemoryRouter initialEntries={initialEntries}>
+            <AuthProvider>{children}</AuthProvider>
+          </MemoryRouter>
+        </TooltipProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
   )
 }
 
