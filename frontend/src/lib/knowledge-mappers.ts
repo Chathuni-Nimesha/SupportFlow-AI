@@ -119,3 +119,43 @@ export function matchesKnowledgeSearch(
     document.source_type.toLowerCase().includes(normalized)
   )
 }
+
+export function knowledgeHitMetaString(
+  metadata: Record<string, unknown>,
+  key: string,
+): string | null {
+  const value = metadata[key]
+  if (typeof value !== "string") return null
+  const trimmed = value.trim()
+  return trimmed || null
+}
+
+export function knowledgeHitMetaNumber(
+  metadata: Record<string, unknown>,
+  key: string,
+): number | null {
+  const value = metadata[key]
+  if (typeof value === "number" && Number.isFinite(value)) return value
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return null
+}
+
+export function formatKnowledgeScore(score: number | null): string | null {
+  if (score === null || Number.isNaN(score)) return null
+  return `${Math.round(score * 100)}% match`
+}
+
+export function formatKnowledgeChunkLabel(
+  chunkIndex: number | null,
+  chunkCount: number | null,
+): string | null {
+  if (chunkIndex === null) return null
+  const humanIndex = chunkIndex + 1
+  if (chunkCount !== null && chunkCount > 0) {
+    return `Chunk ${humanIndex} of ${chunkCount}`
+  }
+  return `Chunk ${humanIndex}`
+}

@@ -2,3 +2,4 @@ export { KnowledgeBaseBoard } from "@/components/knowledge-base/knowledge-base-b
 export { KnowledgeDocumentList } from "@/components/knowledge-base/knowledge-document-list"
 export { KnowledgeDocumentForm } from "@/components/knowledge-base/knowledge-document-form"
 export { KnowledgeDocumentDetail } from "@/components/knowledge-base/knowledge-document-detail"
+export { KnowledgeSemanticSearch } from "@/components/knowledge-base/knowledge-semantic-search"

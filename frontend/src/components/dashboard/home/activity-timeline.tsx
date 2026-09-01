@@ -20,7 +20,7 @@ export function ActivityTimeline() {
         <CardHeader className="border-b border-border/60 pb-4">
           <CardTitle className="text-lg">Activity Timeline</CardTitle>
           <CardDescription className="mt-1">
-            Live operational events across AI, tickets, and team.
+            Recent conversation activity is not tracked as a timeline yet.
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-5">

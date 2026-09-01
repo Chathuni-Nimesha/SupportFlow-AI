@@ -4,6 +4,7 @@ import { BookOpen, Plus } from "lucide-react"
 import { KnowledgeDocumentDetail } from "@/components/knowledge-base/knowledge-document-detail"
 import { KnowledgeDocumentForm } from "@/components/knowledge-base/knowledge-document-form"
 import { KnowledgeDocumentList } from "@/components/knowledge-base/knowledge-document-list"
+import { KnowledgeSemanticSearch } from "@/components/knowledge-base/knowledge-semantic-search"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -234,12 +235,21 @@ export function KnowledgeBaseBoard() {
         </Button>
       </div>
 
+      <KnowledgeSemanticSearch />
+
       <div className="rounded-2xl border border-border/80 bg-card p-4 shadow-soft">
+        <p className="mb-1 text-sm font-semibold text-foreground">
+          Filter documents
+        </p>
+        <p className="mb-3 text-xs text-muted-foreground">
+          Local filter of this document list by title, content, or tags. This is
+          not semantic search.
+        </p>
         <Input
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search by title, content, or tags…"
-          aria-label="Search knowledge documents"
+          placeholder="Filter by title, content, or tags…"
+          aria-label="Filter knowledge documents"
           className="h-11 rounded-2xl bg-background"
         />
       </div>

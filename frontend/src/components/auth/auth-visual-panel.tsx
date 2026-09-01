@@ -1,6 +1,6 @@
 import { motion, useReducedMotion } from "framer-motion"
 import {
-  Activity,
+  BookOpen,
   Bot,
   CheckCircle2,
   MessageSquare,
@@ -11,23 +11,20 @@ import { fadeUp, floatY } from "@/components/landing/motion"
 
 const floatingCards = [
   {
-    title: "AI resolved",
-    value: "87%",
-    subtitle: "+12% this week",
-    icon: Sparkles,
+    title: "Knowledge-grounded",
+    value: "RAG",
+    icon: BookOpen,
     className: "left-4 top-8 sm:left-8 sm:top-12",
   },
   {
-    title: "Avg. response",
-    value: "2.4s",
-    subtitle: "Across all channels",
-    icon: Activity,
+    title: "Suggested replies",
+    value: "Assist",
+    icon: Sparkles,
     className: "right-4 top-28 sm:right-10 sm:top-32",
   },
   {
-    title: "CSAT",
-    value: "4.9★",
-    subtitle: "Customer love",
+    title: "Owner-scoped",
+    value: "Secure",
     icon: MessageSquare,
     className: "bottom-10 left-6 sm:bottom-16 sm:left-12",
   },
@@ -59,23 +56,23 @@ export function AuthVisualPanel() {
               </span>
               <div>
                 <p className="text-sm font-semibold text-foreground">
-                  Inbox overview
+                  Agent workspace
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Live support dashboard
+                  Conversations, knowledge, and AI assistance
                 </p>
               </div>
             </div>
             <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700">
-              Healthy
+              Review first
             </span>
           </div>
 
           <div className="space-y-3">
             {[
-              "Refund request auto-resolved",
-              "Password reset guided in chat",
-              "VIP ticket escalated to human",
+              "Publish a support document",
+              "Generate a grounded suggested reply",
+              "Review and send from the inbox",
             ].map((item, index) => (
               <motion.div
                 key={item}
@@ -89,24 +86,10 @@ export function AuthVisualPanel() {
                 <div>
                   <p className="text-sm font-medium text-foreground">{item}</p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
-                    Just now · SupportFlow Agent
+                    Agent-assisted workflow
                   </p>
                 </div>
               </motion.div>
-            ))}
-          </div>
-
-          <div className="mt-5 grid grid-cols-3 gap-2">
-            {["Resolved", "Pending", "Escalated"].map((label, index) => (
-              <div
-                key={label}
-                className="rounded-2xl bg-primary/[0.06] px-3 py-3 text-center"
-              >
-                <p className="text-lg font-semibold text-foreground">
-                  {[142, 18, 6][index]}
-                </p>
-                <p className="text-[11px] text-muted-foreground">{label}</p>
-              </div>
             ))}
           </div>
         </div>

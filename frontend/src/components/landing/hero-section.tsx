@@ -1,5 +1,6 @@
 import { motion, useReducedMotion } from "framer-motion"
-import { ArrowRight, Bot, Clock3, MessageSquare, Sparkles } from "lucide-react"
+import { ArrowRight, BookOpen, Bot, MessageSquare, Sparkles } from "lucide-react"
+import { Link } from "react-router-dom"
 
 import { fadeUp, floatY, staggerContainer } from "@/components/landing/motion"
 import { Button } from "@/components/ui/button"
@@ -7,26 +8,18 @@ import { Button } from "@/components/ui/button"
 const chatMessages = [
   {
     from: "user" as const,
-    text: "I was charged twice for my last invoice. Can you help?",
+    text: "What's your refund window for online orders?",
   },
   {
     from: "ai" as const,
-    text: "I've found a duplicate charge on March 12. I can refund $49 now or credit your next invoice — which do you prefer?",
-  },
-  {
-    from: "user" as const,
-    text: "Refund it, please.",
-  },
-  {
-    from: "ai" as const,
-    text: "Done. Refund of $49 is processing and you'll get an email receipt in about 2 minutes.",
+    text: "Suggested reply from your knowledge base: refunds are available within 14 days of purchase. Review and send when you're ready.",
   },
 ]
 
-const stats = [
-  { label: "Resolved instantly", value: "87%", icon: Sparkles },
-  { label: "Avg. response", value: "< 3s", icon: Clock3 },
-  { label: "CSAT score", value: "4.9★", icon: MessageSquare },
+const capabilities = [
+  { label: "Knowledge-grounded answers", value: "RAG", icon: BookOpen },
+  { label: "Suggested replies for agents", value: "Assist", icon: Sparkles },
+  { label: "Owner-scoped workspace", value: "Secure", icon: MessageSquare },
 ]
 
 export function HeroSection() {
@@ -57,15 +50,15 @@ export function HeroSection() {
             variants={fadeUp}
             className="text-balance text-4xl font-semibold tracking-tight text-foreground sm:text-5xl lg:text-[3.4rem] lg:leading-[1.08]"
           >
-            AI Customer Support That Never Sleeps
+            AI-powered customer support workspace
           </motion.h1>
           <motion.p
             variants={fadeUp}
             className="mt-5 max-w-lg text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg"
           >
-            Resolve tickets in seconds with an AI agent trained on your docs,
-            policies, and past conversations — so your team can focus on the
-            conversations that matter.
+            Help agents work faster with centralized conversations, a published
+            knowledge base, and retrieval-augmented suggestions they can review
+            before sending.
           </motion.p>
           <motion.div
             variants={fadeUp}
@@ -74,23 +67,28 @@ export function HeroSection() {
             <Button
               size="lg"
               className="h-12 rounded-2xl px-6 text-base shadow-soft"
+              asChild
             >
-              Start free trial
-              <ArrowRight data-icon="inline-end" />
+              <Link to="/register">
+                Get Started
+                <ArrowRight data-icon="inline-end" />
+              </Link>
             </Button>
             <Button
               size="lg"
               variant="outline"
               className="h-12 rounded-2xl border-border bg-white/80 px-6 text-base backdrop-blur"
+              asChild
             >
-              Book a demo
+              <Link to="/login">Login</Link>
             </Button>
           </motion.div>
           <motion.p
             variants={fadeUp}
             className="mt-4 text-sm text-muted-foreground"
           >
-            No credit card required · Setup in under 10 minutes
+            No credit card required. Create a workspace and start from your
+            knowledge base.
           </motion.p>
         </motion.div>
 
@@ -108,20 +106,20 @@ export function HeroSection() {
                 </span>
                 <div>
                   <p className="text-sm font-semibold text-foreground">
-                    SupportFlow Agent
+                    AI suggestion
                   </p>
                   <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <span className="size-1.5 rounded-full bg-emerald-500" />
-                    Online · resolving live
+                    Grounded in published knowledge
                   </p>
                 </div>
               </div>
               <span className="rounded-full bg-secondary px-2.5 py-1 text-[11px] font-medium text-secondary-foreground">
-                AI
+                Review
               </span>
             </div>
 
-            <div className="space-y-3" aria-label="AI chat mockup">
+            <div className="space-y-3" aria-label="AI suggestion preview">
               {chatMessages.map((message, index) => (
                 <motion.div
                   key={message.text}
@@ -140,8 +138,8 @@ export function HeroSection() {
             </div>
           </motion.div>
 
-          {stats.map((stat, index) => {
-            const Icon = stat.icon
+          {capabilities.map((item, index) => {
+            const Icon = item.icon
             const positions = [
               "left-0 top-6 sm:-left-6 lg:-left-10",
               "right-0 top-1/2 sm:-right-4 lg:-right-8",
@@ -150,7 +148,7 @@ export function HeroSection() {
 
             return (
               <motion.div
-                key={stat.label}
+                key={item.label}
                 className={`absolute z-10 ${positions[index]}`}
                 variants={reduceMotion ? undefined : floatY}
                 initial={reduceMotion ? false : "initial"}
@@ -169,9 +167,9 @@ export function HeroSection() {
                   </span>
                   <div>
                     <p className="text-sm font-semibold text-foreground">
-                      {stat.value}
+                      {item.value}
                     </p>
-                    <p className="text-xs text-muted-foreground">{stat.label}</p>
+                    <p className="text-xs text-muted-foreground">{item.label}</p>
                   </div>
                 </motion.div>
               </motion.div>

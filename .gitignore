@@ -33,5 +33,9 @@ Thumbs.db
 coverage/
 .cache/
 .chroma/
+**/.chroma/
 backend/.chroma/
 backend/chroma/
+backend/backend/chroma/
+**/chroma/
+**/*.sqlite3

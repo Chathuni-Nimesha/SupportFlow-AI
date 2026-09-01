@@ -20,7 +20,8 @@ logger = get_logger(__name__)
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     """Manage application startup and shutdown resources."""
-    logger.info("Starting %s (%s)", settings.app_name, settings.app_env)
+    current = get_settings()
+    logger.info("Starting %s (%s)", current.app_name, current.app_env)
 
     try:
         await connect_mongodb()
@@ -41,25 +42,27 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
+    current = get_settings()
+    docs_enabled = current.app_debug
     application = FastAPI(
-        title=settings.app_name,
-        version=settings.app_version,
-        debug=settings.app_debug,
+        title=current.app_name,
+        version=current.app_version,
+        debug=current.app_debug,
         lifespan=lifespan,
-        docs_url="/docs" if settings.app_debug else None,
-        redoc_url="/redoc" if settings.app_debug else None,
-        openapi_url="/openapi.json" if settings.app_debug else None,
+        docs_url="/docs" if docs_enabled else None,
+        redoc_url="/redoc" if docs_enabled else None,
+        openapi_url="/openapi.json" if docs_enabled else None,
     )
 
     application.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_origins,
+        allow_origins=current.cors_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
 
-    application.include_router(api_router, prefix=settings.api_prefix)
+    application.include_router(api_router, prefix=current.api_prefix)
 
     return application
 

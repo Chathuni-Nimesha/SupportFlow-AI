@@ -58,3 +58,25 @@ export type KnowledgeDocumentFormValues = {
   status: KnowledgeStatus
   tags: string
 }
+
+/** POST /knowledge/search */
+export type KnowledgeSearchRequest = {
+  query: string
+  top_k?: number
+}
+
+/** Raw API hit from POST /knowledge/search */
+export type KnowledgeSearchHit = {
+  id: string
+  document: string
+  metadata: Record<string, unknown>
+  distance: number | null
+  score: number | null
+}
+
+export type KnowledgeSearchResponse = {
+  query: string
+  top_k: number
+  count: number
+  results: KnowledgeSearchHit[]
+}

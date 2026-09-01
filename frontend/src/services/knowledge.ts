@@ -4,6 +4,8 @@ import type {
   KnowledgeDocumentCreatePayload,
   KnowledgeDocumentUpdatePayload,
   KnowledgeIngestionResponse,
+  KnowledgeSearchRequest,
+  KnowledgeSearchResponse,
 } from "@/types/knowledge"
 
 export async function listKnowledgeDocuments(): Promise<KnowledgeDocument[]> {
@@ -52,6 +54,16 @@ export async function ingestKnowledgeDocument(
 ): Promise<KnowledgeIngestionResponse> {
   const { data } = await api.post<KnowledgeIngestionResponse>(
     `/knowledge-documents/${documentId}/ingest`,
+  )
+  return data
+}
+
+export async function searchKnowledge(
+  payload: KnowledgeSearchRequest,
+): Promise<KnowledgeSearchResponse> {
+  const { data } = await api.post<KnowledgeSearchResponse>(
+    "/knowledge/search",
+    payload,
   )
   return data
 }

@@ -2,13 +2,13 @@ import { motion } from "framer-motion"
 
 import { fadeUp, staggerContainer } from "@/components/landing/motion"
 
-const companies = [
-  "Nimbus",
-  "Orbitly",
-  "Clearpath",
-  "Voltware",
-  "Harbor",
-  "Lumen Labs",
+const capabilities = [
+  "Conversations",
+  "Knowledge Base",
+  "Semantic search",
+  "RAG answers",
+  "Suggested replies",
+  "Secure login",
 ]
 
 export function TrustedCompanies() {
@@ -30,19 +30,19 @@ export function TrustedCompanies() {
             variants={fadeUp}
             className="text-sm font-medium tracking-wide text-muted-foreground"
           >
-            Trusted by modern support teams worldwide
+            Included in the workspace
           </motion.p>
           <motion.ul
             variants={staggerContainer}
             className="mt-8 grid grid-cols-2 items-center gap-4 sm:grid-cols-3 lg:grid-cols-6"
           >
-            {companies.map((company) => (
+            {capabilities.map((item) => (
               <motion.li
-                key={company}
+                key={item}
                 variants={fadeUp}
-                className="flex h-14 items-center justify-center rounded-2xl border border-transparent bg-muted/40 px-3 text-sm font-semibold tracking-tight text-slate-400 transition hover:border-border hover:bg-white hover:text-slate-600 hover:shadow-soft"
+                className="flex h-14 items-center justify-center rounded-2xl border border-transparent bg-muted/40 px-3 text-sm font-semibold tracking-tight text-slate-500 transition hover:border-border hover:bg-white hover:text-slate-700 hover:shadow-soft"
               >
-                <span aria-label={`${company} logo`}>{company}</span>
+                {item}
               </motion.li>
             ))}
           </motion.ul>

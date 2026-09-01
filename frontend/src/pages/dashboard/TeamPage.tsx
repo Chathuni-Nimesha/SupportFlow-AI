@@ -1,5 +1,5 @@
-import { DashboardPlaceholderPage } from "@/pages/dashboard/DashboardPlaceholderPage"
+import { TeamBoard } from "@/components/team"
 
 export function TeamPage() {
-  return <DashboardPlaceholderPage title="Team" />
+  return <TeamBoard />
 }

@@ -1,5 +1,5 @@
 import { motion } from "framer-motion"
-import { Link2, Rocket, Settings2, UploadCloud } from "lucide-react"
+import { BookOpen, Bot, MessageSquarePlus, UserRound } from "lucide-react"
 
 import { fadeUp, staggerContainer } from "@/components/landing/motion"
 import { SectionHeading } from "@/components/landing/section-heading"
@@ -7,38 +7,38 @@ import { SectionHeading } from "@/components/landing/section-heading"
 const steps = [
   {
     step: "01",
-    title: "Connect your channels",
+    title: "Create a workspace",
     description:
-      "Plug in email, chat widget, Slack, or helpdesk tools in a few clicks.",
-    icon: Link2,
+      "Register with email and password. Your conversations and knowledge stay scoped to your account.",
+    icon: UserRound,
   },
   {
     step: "02",
-    title: "Upload knowledge",
+    title: "Publish knowledge",
     description:
-      "Import docs, macros, and past tickets. We embed and index them securely.",
-    icon: UploadCloud,
+      "Add support documents, publish them, and embed them for semantic retrieval.",
+    icon: BookOpen,
   },
   {
     step: "03",
-    title: "Tune your agent",
+    title: "Work conversations",
     description:
-      "Set tone, escalation rules, and guardrails so AI stays on-brand.",
-    icon: Settings2,
+      "Create threads, read messages, update status, and draft replies from the inbox.",
+    icon: MessageSquarePlus,
   },
   {
     step: "04",
-    title: "Go live & improve",
+    title: "Ask or suggest with AI",
     description:
-      "Launch instantly, monitor quality, and let continuous learning refine replies.",
-    icon: Rocket,
+      "Generate a knowledge-grounded answer or suggested reply, then review it before sending.",
+    icon: Bot,
   },
 ]
 
 export function HowItWorks() {
   return (
     <section
-      id="resources"
+      id="how-it-works"
       className="scroll-mt-24 bg-white py-20 sm:py-24"
       aria-labelledby="how-heading"
     >
@@ -46,8 +46,8 @@ export function HowItWorks() {
         <SectionHeading
           id="how-heading"
           eyebrow="How it works"
-          title="From setup to resolved — in four steps"
-          description="A calm onboarding path designed for support leads, not engineers."
+          title="From knowledge to a reviewed reply"
+          description="Four steps that match the product you can use today — no extra channels or billing required."
         />
 
         <motion.ol

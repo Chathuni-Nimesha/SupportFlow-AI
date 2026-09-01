@@ -167,7 +167,8 @@ async def answer_with_rag(
     except (GeminiConfigurationError, GeminiProviderError, GeminiValidationError):
         raise
     except Exception as exc:
-        logger.exception("Unexpected Gemini failure during RAG")
+        # Do not log str(exc)/traceback: unexpected errors can include provider details.
+        logger.error("Gemini generation failed")
         raise GeminiProviderError(
             "Answer generation failed. Please try again later.",
         ) from exc

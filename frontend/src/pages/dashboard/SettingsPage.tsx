@@ -1,5 +1,5 @@
-import { DashboardPlaceholderPage } from "@/pages/dashboard/DashboardPlaceholderPage"
+import { SettingsBoard } from "@/components/settings"
 
 export function SettingsPage() {
-  return <DashboardPlaceholderPage title="Settings" />
+  return <SettingsBoard />
 }

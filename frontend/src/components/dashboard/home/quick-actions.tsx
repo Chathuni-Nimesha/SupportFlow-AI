@@ -4,9 +4,8 @@ import {
   BookOpen,
   Bot,
   MessageSquarePlus,
-  TicketPlus,
-  UserPlus,
   BarChart3,
+  Search,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 
@@ -33,32 +32,26 @@ const actions: QuickAction[] = [
     icon: MessageSquarePlus,
   },
   {
-    label: "Create ticket",
-    description: "Log a tracked support issue",
-    href: "/dashboard/tickets",
-    icon: TicketPlus,
-  },
-  {
-    label: "Add knowledge",
-    description: "Upload docs for the AI agent",
+    label: "Open Knowledge Base",
+    description: "Create and publish support documents",
     href: "/dashboard/knowledge-base",
     icon: BookOpen,
   },
   {
-    label: "Invite teammate",
-    description: "Grow your support pod",
-    href: "/dashboard/team",
-    icon: UserPlus,
-  },
-  {
-    label: "Tune AI assistant",
-    description: "Adjust tone and guardrails",
+    label: "Ask AI Assistant",
+    description: "Get a knowledge-grounded answer",
     href: "/dashboard/ai-assistant",
     icon: Bot,
   },
   {
+    label: "Semantic search",
+    description: "Find published knowledge chunks",
+    href: "/dashboard/knowledge-base",
+    icon: Search,
+  },
+  {
     label: "View analytics",
-    description: "Inspect deeper trends",
+    description: "See conversation counts from your inbox",
     href: "/dashboard/analytics",
     icon: BarChart3,
   },
@@ -75,7 +68,7 @@ export function QuickActions() {
         <CardHeader className="border-b border-border/60 pb-4">
           <CardTitle className="text-lg">Quick Actions</CardTitle>
           <CardDescription className="mt-1">
-            Jump into the workflows your team uses most.
+            Jump into workflows that are connected to the product today.
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-5">

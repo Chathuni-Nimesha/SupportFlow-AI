@@ -1,5 +1,6 @@
 """Gemini grounded-answer service tests (no real API calls)."""
 
+import logging
 from unittest.mock import MagicMock
 
 import pytest
@@ -167,37 +168,58 @@ async def test_generate_grounded_answer_empty_context(
 @pytest.mark.asyncio
 async def test_generate_grounded_answer_provider_error(
     configured_settings,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    mock_client = MagicMock(spec=GeminiClient)
-    mock_client.generate.side_effect = RuntimeError(
-        "upstream failed api_key=AIzaSyShouldNeverLeak",
+    fake_key = "AIzaSyShouldNeverLeak"
+    raw_provider_text = (
+        f"upstream failed api_key={fake_key}. Authorization: Bearer {fake_key}"
     )
+    mock_client = MagicMock(spec=GeminiClient)
+    mock_client.generate.side_effect = RuntimeError(raw_provider_text)
     set_gemini_client(mock_client)
 
-    with pytest.raises(GeminiProviderError) as exc_info:
-        await generate_grounded_answer(
-            question="What is the refund policy?",
-            context="Refunds are available within 14 days.",
-        )
+    with caplog.at_level(logging.ERROR, logger="app.services.gemini_service"):
+        with pytest.raises(GeminiProviderError) as exc_info:
+            await generate_grounded_answer(
+                question="What is the refund policy?",
+                context="Refunds are available within 14 days.",
+            )
 
     message = str(exc_info.value)
-    assert "AIzaSyShouldNeverLeak" not in message
-    assert "api_key=AIzaSyShouldNeverLeak" not in message
+    assert fake_key not in message
+    assert f"api_key={fake_key}" not in message
+    assert "[redacted]" in message
+
+    log_text = caplog.text
+    assert "Gemini generation failed" in log_text
+    assert fake_key not in log_text
+    assert raw_provider_text not in log_text
+    assert "Invalid API key" not in log_text
+    assert "Authorization: Bearer" not in log_text
+    assert "upstream failed" not in log_text
+    assert all(record.exc_info is None for record in caplog.records)
+    assert all(getattr(record, "exc_text", None) is None for record in caplog.records)
 
 
 @pytest.mark.asyncio
 async def test_generate_grounded_answer_unexpected_provider_error(
     configured_settings,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     mock_client = MagicMock(spec=GeminiClient)
     mock_client.generate.side_effect = ValueError("boom")
     set_gemini_client(mock_client)
 
-    with pytest.raises(GeminiProviderError, match="boom"):
-        await generate_grounded_answer(
-            question="What is the refund policy?",
-            context="Refunds are available within 14 days.",
-        )
+    with caplog.at_level(logging.ERROR, logger="app.services.gemini_service"):
+        with pytest.raises(GeminiProviderError, match="boom"):
+            await generate_grounded_answer(
+                question="What is the refund policy?",
+                context="Refunds are available within 14 days.",
+            )
+
+    assert "Gemini generation failed" in caplog.text
+    assert "boom" not in caplog.text
+    assert all(record.exc_info is None for record in caplog.records)
 
 
 def test_build_http_options_retries_unavailable_errors() -> None:

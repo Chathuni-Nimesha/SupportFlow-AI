@@ -35,7 +35,7 @@ export function AiSummaryCard() {
         <CardHeader className="border-b border-border/60 pb-4">
           <CardTitle className="text-lg">AI Summary</CardTitle>
           <CardDescription className="mt-1">
-            Snapshot of autonomous support activity for today.
+            AI volume metrics are not available yet. Suggestions still require an agent to review and send.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5 pt-5">

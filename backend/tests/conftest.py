@@ -27,6 +27,9 @@ async def client() -> AsyncIterator[AsyncClient]:
 
     get_settings.cache_clear()
     chroma_module.reset_chroma_client()
+    from app.core.rate_limit import reset_auth_rate_limiter
+
+    reset_auth_rate_limiter()
 
     mock_client = AsyncMongoMockClient()
     mock_db = mock_client["supportflow_test"]

@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from app.config.settings import get_settings
+from app.config.settings import get_settings, normalize_chroma_auth_header
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -81,12 +81,42 @@ def get_embedding_function() -> Any:
     return _embedding_function
 
 
+def http_chroma_client_kwargs(settings: Any) -> dict[str, Any]:
+    """
+    Build HttpClient keyword arguments from settings.
+
+    Authentication/TLS are only attached when configured. An empty token
+    does not enable Chroma auth.
+    """
+    kwargs: dict[str, Any] = {
+        "host": (settings.chroma_host or "localhost").strip() or "localhost",
+        "port": int(settings.chroma_port),
+        "ssl": bool(settings.chroma_ssl),
+    }
+    token = (settings.chroma_auth_token or "").strip()
+    if not token:
+        return kwargs
+
+    from chromadb.config import Settings as ChromaClientSettings
+
+    kwargs["settings"] = ChromaClientSettings(
+        chroma_client_auth_provider=(
+            "chromadb.auth.token_authn.TokenAuthClientProvider"
+        ),
+        chroma_client_auth_credentials=token,
+        chroma_auth_token_transport_header=normalize_chroma_auth_header(
+            getattr(settings, "chroma_auth_header", None),
+        ),
+    )
+    return kwargs
+
+
 def get_chroma_client() -> Any:
     """
     Lazily create and return a ChromaDB client.
 
     Modes:
-    - http: chromadb.HttpClient(CHROMA_HOST, CHROMA_PORT)
+    - http: chromadb.HttpClient(CHROMA_HOST, CHROMA_PORT, optional SSL/token)
     - persistent: local PersistentClient(CHROMA_PERSIST_DIRECTORY)
     - ephemeral: in-memory EphemeralClient (tests)
     """
@@ -112,14 +142,14 @@ def get_chroma_client() -> Any:
             settings.chroma_persist_directory,
         )
     else:
-        _chroma_client = chromadb.HttpClient(
-            host=settings.chroma_host,
-            port=settings.chroma_port,
-        )
+        kwargs = http_chroma_client_kwargs(settings)
+        _chroma_client = chromadb.HttpClient(**kwargs)
         logger.info(
-            "ChromaDB HttpClient configured for %s:%s",
-            settings.chroma_host,
-            settings.chroma_port,
+            "ChromaDB HttpClient configured for %s:%s ssl=%s auth=%s",
+            kwargs["host"],
+            kwargs["port"],
+            kwargs["ssl"],
+            "token" if "settings" in kwargs else "none",
         )
 
     return _chroma_client

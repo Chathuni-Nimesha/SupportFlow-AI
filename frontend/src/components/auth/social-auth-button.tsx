@@ -3,7 +3,6 @@ import { cn } from "@/lib/utils"
 
 type SocialAuthButtonProps = {
   provider?: "google"
-  onClick?: () => void
   className?: string
 }
 
@@ -37,23 +36,29 @@ function GoogleIcon({ className }: { className?: string }) {
 
 export function SocialAuthButton({
   provider = "google",
-  onClick,
   className,
 }: SocialAuthButtonProps) {
   if (provider !== "google") return null
 
   return (
-    <Button
-      type="button"
-      variant="outline"
-      onClick={onClick}
-      className={cn(
-        "h-12 w-full rounded-2xl border-border bg-white text-sm font-medium shadow-soft hover:bg-muted/60",
-        className,
-      )}
-    >
-      <GoogleIcon className="size-5" />
-      Continue with Google
-    </Button>
+    <div className="space-y-2">
+      <Button
+        type="button"
+        variant="outline"
+        disabled
+        title="Google login is not available yet"
+        aria-disabled="true"
+        className={cn(
+          "h-12 w-full rounded-2xl border-border bg-white text-sm font-medium shadow-soft",
+          className,
+        )}
+      >
+        <GoogleIcon className="size-5 opacity-70" />
+        Continue with Google
+      </Button>
+      <p className="text-center text-xs text-muted-foreground">
+        Google login is not available yet.
+      </p>
+    </div>
   )
 }

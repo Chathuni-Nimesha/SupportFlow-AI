@@ -1,5 +1,6 @@
 """RAG composition service and AI answer API tests."""
 
+import logging
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -180,6 +181,46 @@ async def test_answer_with_rag_gemini_configuration_error() -> None:
                 question="Refund policy?",
                 top_k=5,
             )
+
+
+@pytest.mark.asyncio
+async def test_answer_with_rag_unexpected_gemini_failure_does_not_log_raw_exception(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    fake_key = "AIzaSyFakeRagGeminiTestKeyOnly"
+    raw_provider_text = (
+        f"SDK crashed with api_key={fake_key}. Authorization: Bearer {fake_key}"
+    )
+
+    with (
+        patch(
+            "app.services.rag_service.retrieve_knowledge",
+            new_callable=AsyncMock,
+            return_value=SAMPLE_HITS[:1],
+        ),
+        patch(
+            "app.services.rag_service.generate_grounded_answer",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError(raw_provider_text),
+        ),
+        caplog.at_level(logging.ERROR, logger="app.services.rag_service"),
+    ):
+        with pytest.raises(GeminiProviderError) as exc_info:
+            await answer_with_rag(
+                owner_id="owner-a",
+                question="Refund policy?",
+                top_k=5,
+            )
+
+    assert str(exc_info.value) == "Answer generation failed. Please try again later."
+    assert fake_key not in str(exc_info.value)
+
+    log_text = caplog.text
+    assert "Gemini generation failed" in log_text
+    assert fake_key not in log_text
+    assert raw_provider_text not in log_text
+    assert "Authorization: Bearer" not in log_text
+    assert all(record.exc_info is None for record in caplog.records)
 
 
 @pytest.mark.asyncio

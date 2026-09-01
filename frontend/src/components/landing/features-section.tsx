@@ -1,5 +1,5 @@
 import { motion } from "framer-motion"
-import { BarChart3, BookOpen, MessageCircleHeart } from "lucide-react"
+import { BookOpen, Bot, MessageSquare } from "lucide-react"
 
 import { fadeUp, staggerContainer } from "@/components/landing/motion"
 import { SectionHeading } from "@/components/landing/section-heading"
@@ -13,25 +13,25 @@ import {
 
 const features = [
   {
-    title: "AI Chatbot",
+    title: "Conversations",
     description:
-      "A multilingual agent that answers instantly from your knowledge base, escalates edge cases, and mirrors your brand voice.",
-    icon: MessageCircleHeart,
-    points: ["24/7 autonomous replies", "Human handoff", "Tone controls"],
+      "Keep customer threads in one inbox. Create conversations, send replies, and update status as work moves forward.",
+    icon: MessageSquare,
+    points: ["Messages and status", "AI-assisted drafts", "Owner-scoped inbox"],
   },
   {
     title: "Knowledge Base",
     description:
-      "Sync docs, FAQs, and SOPs. Retrieval stays fresh so answers cite the right source every time.",
+      "Write, publish, and embed support documents. Semantic search retrieves the right chunks for agents and the AI assistant.",
     icon: BookOpen,
-    points: ["Auto sync & embeddings", "Source citations", "Version awareness"],
+    points: ["CRUD and publishing", "Chroma embeddings", "Source citations"],
   },
   {
-    title: "Analytics",
+    title: "AI Assistant",
     description:
-      "See deflection rates, CSAT, and topic trends in one calm dashboard built for operators — not data scientists.",
-    icon: BarChart3,
-    points: ["Live performance", "Topic clustering", "Export-ready reports"],
+      "Ask questions or generate suggested replies grounded in published knowledge. Agents review the draft before anything is sent.",
+    icon: Bot,
+    points: ["RAG-powered answers", "Suggested replies", "No invented policy"],
   },
 ]
 
@@ -46,8 +46,8 @@ export function FeaturesSection() {
         <SectionHeading
           id="features-heading"
           eyebrow="Features"
-          title="Everything you need to deliver effortless support"
-          description="Purpose-built modules that work together — from first reply to board-ready insights."
+          title="What the workspace actually includes"
+          description="Built for support agents: conversations, knowledge, and retrieval-augmented assistance in one secure product."
         />
 
         <motion.div

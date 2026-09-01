@@ -7,3 +7,4 @@ export { PasswordInput } from "@/components/auth/password-input"
 export { ProtectedRoute } from "@/components/auth/protected-route"
 export { RegisterForm } from "@/components/auth/register-form"
 export { SocialAuthButton } from "@/components/auth/social-auth-button"
+  

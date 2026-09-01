@@ -203,7 +203,8 @@ def _generate_grounded_answer_sync(*, question: str, context: str) -> str:
     except GeminiValidationError:
         raise
     except Exception as exc:
-        logger.exception("Gemini provider call failed")
+        # Do not log str(exc)/traceback: provider errors can contain API keys.
+        logger.error("Gemini generation failed")
         raise GeminiProviderError(
             sanitize_error_message(str(exc)),
         ) from exc

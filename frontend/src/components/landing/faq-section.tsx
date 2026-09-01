@@ -11,29 +11,29 @@ import {
 
 const faqs = [
   {
-    question: "How does SupportFlow AI learn my product?",
+    question: "How does the AI use my knowledge?",
     answer:
-      "Connect your help center, Notion/Google Docs, and past tickets. We embed and continuously re-index content so answers stay accurate as docs change.",
+      "You create and publish documents in the Knowledge Base. Published content is chunked and embedded, then retrieved when you ask the AI assistant or generate a suggested reply. The model answers from that context and does not invent policy when nothing relevant is found.",
   },
   {
-    question: "Can the AI escalate to a human agent?",
+    question: "Does the AI send replies to customers automatically?",
     answer:
-      "Yes. Define confidence thresholds, sensitive topics, and VIP rules. When matched, conversations hand off with full context to your inbox or Slack.",
+      "No. Suggestions and answers are for agents to review. Inserting a suggestion into the composer and sending it is a manual step.",
   },
   {
-    question: "Is customer data secure?",
+    question: "Who can see my conversations and documents?",
     answer:
-      "Data is encrypted in transit and at rest. Enterprise plans include SSO, audit logs, regional data residency options, and custom retention policies.",
+      "Data is scoped to the signed-in account. Other users cannot read your conversations or knowledge. This version does not include team sharing, roles, or SSO.",
   },
   {
-    question: "Which channels are supported?",
+    question: "Is there a public customer chat widget?",
     answer:
-      "Web chat, email, Slack, and major helpdesks. More channels are on the roadmap — Professional and Enterprise include priority access.",
+      "Not yet. Conversations are created and managed inside the signed-in workspace. There is no customer-facing chatbot, email channel, or Slack integration in this version.",
   },
   {
-    question: "Do I need engineers to launch?",
+    question: "Are tickets, team, and billing included?",
     answer:
-      "No. Most teams go live in under a day with our guided setup. Developers can use webhooks and APIs when you need deeper customization.",
+      "Those modules are listed as unavailable in the product. The working MVP is conversations, knowledge, semantic search, and knowledge-grounded AI assistance.",
   },
 ]
 
@@ -47,8 +47,8 @@ export function FAQSection() {
         <SectionHeading
           id="faq-heading"
           eyebrow="FAQ"
-          title="Answers before you ask"
-          description="Straight talk on setup, safety, and how AI fits into your support workflow."
+          title="Straight answers about this version"
+          description="What the workspace does today — and what it does not claim to do."
         />
 
         <motion.div

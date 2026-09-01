@@ -2,9 +2,10 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 
 from app.auth.deps import get_current_user
+from app.core.rate_limit import enforce_auth_rate_limit
 from app.schemas.auth import (
     AuthTokenResponse,
     MessageResponse,
@@ -22,12 +23,14 @@ router = APIRouter(prefix="/auth", tags=["auth"])
     response_model=UserResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def register(payload: UserRegisterRequest) -> UserResponse:
+async def register(request: Request, payload: UserRegisterRequest) -> UserResponse:
+    enforce_auth_rate_limit("register", request, payload.email)
     return await auth_service.register_user(payload)
 
 
 @router.post("/login", response_model=AuthTokenResponse)
-async def login(payload: UserLoginRequest) -> AuthTokenResponse:
+async def login(request: Request, payload: UserLoginRequest) -> AuthTokenResponse:
+    enforce_auth_rate_limit("login", request, payload.email)
     return await auth_service.authenticate_user(payload)
 
 

@@ -1,31 +1,28 @@
 import { motion } from "framer-motion"
-import { Star } from "lucide-react"
+import { BookOpen, Bot, MessageSquare, Search } from "lucide-react"
 
 import { fadeUp, staggerContainer } from "@/components/landing/motion"
 import { SectionHeading } from "@/components/landing/section-heading"
 import { Card, CardContent } from "@/components/ui/card"
 
-const testimonials = [
+const useCases = [
   {
-    quote:
-      "SupportFlow cut our first-response time from hours to seconds. Customers notice — and our CSAT jumped in the first month.",
-    name: "Maya Chen",
-    role: "Head of Support, Orbitly",
-    initials: "MC",
+    title: "Draft with knowledge",
+    description:
+      "Open a conversation, generate a suggested reply from published documents, then edit and send it yourself.",
+    icon: MessageSquare,
   },
   {
-    quote:
-      "The knowledge sync actually works. Our AI cites the right policy every time, which finally made legal comfortable with automation.",
-    name: "Jonah Pierce",
-    role: "COO, Clearpath",
-    initials: "JP",
+    title: "Keep answers grounded",
+    description:
+      "Ask the AI assistant a policy question. It retrieves matching chunks and answers only from that context.",
+    icon: Bot,
   },
   {
-    quote:
-      "We evaluated three platforms. SupportFlow felt like Linear for support — fast, calm, and obsessively well designed.",
-    name: "Aisha Rahman",
-    role: "CX Lead, Harbor",
-    initials: "AR",
+    title: "Find the right doc",
+    description:
+      "Publish FAQs and SOPs, then use semantic search when you need the exact passage — not a guess.",
+    icon: Search,
   },
 ]
 
@@ -39,9 +36,9 @@ export function Testimonials() {
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         <SectionHeading
           id="testimonials-heading"
-          eyebrow="Testimonials"
-          title="Loved by teams who obsess over customer experience"
-          description="Real operators, shipping better support without adding headcount overnight."
+          eyebrow="In practice"
+          title="How agents use SupportFlow"
+          description="Typical workflows in the current workspace — not customer case studies or CSAT results."
         />
 
         <motion.div
@@ -51,40 +48,30 @@ export function Testimonials() {
           viewport={{ once: true, amount: 0.2 }}
           className="mt-14 grid gap-6 md:grid-cols-3"
         >
-          {testimonials.map((item) => (
-            <motion.div key={item.name} variants={fadeUp}>
-              <Card className="h-full rounded-2xl border-border/80 bg-white shadow-soft">
-                <CardContent className="flex h-full flex-col p-6">
-                  <div
-                    className="mb-4 flex gap-1 text-amber-400"
-                    aria-label="5 out of 5 stars"
-                  >
-                    {Array.from({ length: 5 }).map((_, index) => (
-                      <Star
-                        key={index}
-                        className="size-4 fill-current"
-                        aria-hidden
-                      />
-                    ))}
-                  </div>
-                  <blockquote className="flex-1 text-sm leading-relaxed text-foreground sm:text-[15px]">
-                    “{item.quote}”
-                  </blockquote>
-                  <div className="mt-6 flex items-center gap-3 border-t border-border/70 pt-5">
-                    <span className="flex size-10 items-center justify-center rounded-2xl bg-primary/10 text-sm font-semibold text-primary">
-                      {item.initials}
+          {useCases.map((item) => {
+            const Icon = item.icon
+            return (
+              <motion.div key={item.title} variants={fadeUp}>
+                <Card className="h-full rounded-2xl border-border/80 bg-white shadow-soft">
+                  <CardContent className="flex h-full flex-col p-6">
+                    <span className="mb-4 flex size-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                      <Icon className="size-4" aria-hidden />
                     </span>
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">
-                        {item.name}
-                      </p>
-                      <p className="text-xs text-muted-foreground">{item.role}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          ))}
+                    <h3 className="text-lg font-semibold text-foreground">
+                      {item.title}
+                    </h3>
+                    <p className="mt-3 flex-1 text-sm leading-relaxed text-muted-foreground">
+                      {item.description}
+                    </p>
+                    <p className="mt-6 flex items-center gap-2 border-t border-border/70 pt-5 text-xs text-muted-foreground">
+                      <BookOpen className="size-3.5" aria-hidden />
+                      Requires published knowledge
+                    </p>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            )
+          })}
         </motion.div>
       </div>
     </section>

@@ -40,6 +40,14 @@ function getStoredToken() {
   return localStorage.getItem(TOKEN_KEY)
 }
 
+function isUnauthorizedError(error: unknown): boolean {
+  return isAxiosError(error) && error.response?.status === 401
+}
+
+function clearStoredSession() {
+  localStorage.removeItem(TOKEN_KEY)
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [token, setToken] = useState<string | null>(() => getStoredToken())
@@ -77,12 +85,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setToken(stored)
         }
       } catch (error) {
-        localStorage.removeItem(TOKEN_KEY)
-        if (active) {
+        if (isUnauthorizedError(error)) {
+          clearStoredSession()
+          if (active) {
+            setUser(null)
+            setToken(null)
+          }
+        } else if (active) {
+          // Keep the token so Retry / refreshUser() can call /auth/me again.
           setUser(null)
-          setToken(null)
-        }
-        if (!isAxiosError(error) || error.response?.status !== 401) {
+          setToken(stored)
           console.error("Failed to restore auth session", error)
         }
       } finally {

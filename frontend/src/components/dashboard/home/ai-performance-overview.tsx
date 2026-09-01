@@ -21,7 +21,7 @@ export function AiPerformanceOverview() {
           <div>
             <CardTitle className="text-lg">AI Performance Overview</CardTitle>
             <CardDescription className="mt-1">
-              Weekly resolution trend across all support channels.
+              Resolution-rate trends are not collected in this version.
             </CardDescription>
           </div>
         </CardHeader>

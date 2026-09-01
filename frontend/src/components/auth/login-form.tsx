@@ -2,7 +2,7 @@ import { useId, useState } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { motion } from "framer-motion"
 import { Loader2 } from "lucide-react"
-import { Controller, useForm } from "react-hook-form"
+import { useForm } from "react-hook-form"
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom"
 
 import { AuthDivider } from "@/components/auth/auth-divider"
@@ -11,9 +11,7 @@ import { PasswordInput } from "@/components/auth/password-input"
 import { SocialAuthButton } from "@/components/auth/social-auth-button"
 import { fadeUp, staggerContainer } from "@/components/landing/motion"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { useAuth } from "@/context/auth-provider"
 import { loginSchema, type LoginFormValues } from "@/schemas/auth"
 import { getApiErrorMessage } from "@/utils/api-error"
@@ -26,7 +24,6 @@ type LoginFormProps = {
 export function LoginForm({ className }: LoginFormProps) {
   const emailId = useId()
   const passwordId = useId()
-  const rememberId = useId()
   const navigate = useNavigate()
   const location = useLocation()
   const { login, isAuthenticated, isLoading } = useAuth()
@@ -35,14 +32,12 @@ export function LoginForm({ className }: LoginFormProps) {
   const {
     register,
     handleSubmit,
-    control,
     formState: { errors, isSubmitting },
   } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
       email: "",
       password: "",
-      rememberMe: false,
     },
   })
 
@@ -110,8 +105,8 @@ export function LoginForm({ className }: LoginFormProps) {
           label="Password"
           error={errors.password?.message}
           labelAside={
-            <span className="text-sm font-medium text-muted-foreground">
-              Forgot password?
+            <span className="text-xs font-medium text-muted-foreground">
+              Password reset is not available yet.
             </span>
           }
         >
@@ -126,27 +121,6 @@ export function LoginForm({ className }: LoginFormProps) {
             {...register("password")}
           />
         </FormField>
-
-        <div className="flex items-center gap-2.5">
-          <Controller
-            name="rememberMe"
-            control={control}
-            render={({ field }) => (
-              <Checkbox
-                id={rememberId}
-                checked={field.value}
-                onCheckedChange={(checked) => field.onChange(checked === true)}
-                className="rounded-md"
-              />
-            )}
-          />
-          <Label
-            htmlFor={rememberId}
-            className="cursor-pointer text-sm font-normal text-muted-foreground"
-          >
-            Remember me for 30 days
-          </Label>
-        </div>
 
         {apiError ? (
           <p

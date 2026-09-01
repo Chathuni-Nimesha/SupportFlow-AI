@@ -1,5 +1,6 @@
 import { motion } from "framer-motion"
 import { Check } from "lucide-react"
+import { Link } from "react-router-dom"
 
 import { fadeUp, staggerContainer } from "@/components/landing/motion"
 import { SectionHeading } from "@/components/landing/section-heading"
@@ -16,48 +17,55 @@ import { cn } from "@/lib/utils"
 
 const plans = [
   {
-    name: "Starter",
-    price: "$29",
-    period: "/month",
-    description: "For early teams launching AI support on a single channel.",
+    name: "Workspace",
+    price: "Free to try",
+    period: "",
+    description:
+      "The current product: an authenticated agent workspace with knowledge-grounded AI assistance.",
     features: [
-      "1,000 AI resolutions / mo",
-      "Chat widget + email",
-      "Basic analytics",
-      "Email support",
+      "Conversations and messages",
+      "Knowledge Base CRUD and publishing",
+      "Semantic knowledge search",
+      "AI-assisted suggested replies",
+      "RAG-powered answers",
+      "Owner-scoped workspace",
     ],
-    cta: "Start with Starter",
-    highlighted: false,
+    cta: "Get Started",
+    href: "/register",
+    highlighted: true,
+    available: true,
   },
   {
-    name: "Professional",
-    price: "$99",
-    period: "/month",
-    description: "For growing support orgs that need depth, control, and speed.",
+    name: "Team",
+    price: "Coming soon",
+    period: "",
+    description:
+      "Shared inboxes, invites, and roles are not available in this version.",
     features: [
-      "10,000 AI resolutions / mo",
-      "All channels + Slack",
-      "Advanced analytics",
-      "Knowledge sync",
-      "Priority support",
+      "Team member directory",
+      "Invitations and roles",
+      "Shared workspace controls",
     ],
-    cta: "Choose Professional",
-    highlighted: true,
+    cta: "Coming soon",
+    href: null,
+    highlighted: false,
+    available: false,
   },
   {
     name: "Enterprise",
-    price: "Custom",
+    price: "Coming soon",
     period: "",
-    description: "Security, SLAs, and dedicated success for large organizations.",
+    description:
+      "Billing, SSO, and dedicated success programs are not implemented yet.",
     features: [
-      "Unlimited resolutions",
-      "SSO & audit logs",
-      "Custom models & guardrails",
-      "Dedicated CSM",
-      "99.9% uptime SLA",
+      "Paid billing plans",
+      "SSO and audit logs",
+      "Custom SLAs",
     ],
-    cta: "Talk to sales",
+    cta: "Coming soon",
+    href: null,
     highlighted: false,
+    available: false,
   },
 ]
 
@@ -71,9 +79,9 @@ export function PricingSection() {
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         <SectionHeading
           id="pricing-heading"
-          eyebrow="Pricing"
-          title="Simple plans that scale with your inbox"
-          description="Start free, upgrade when AI is resolving real volume. No surprise seat fees."
+          eyebrow="Access"
+          title="Start with a workspace. Paid plans are not live yet."
+          description="Create an account to use the product today. Billing is not implemented — there is nothing to purchase."
         />
 
         <motion.div
@@ -92,18 +100,22 @@ export function PricingSection() {
                     "border-primary bg-white shadow-soft-lg ring-2 ring-primary/20 lg:-translate-y-2",
                 )}
               >
-                {plan.highlighted ? (
+                {plan.available ? (
                   <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground shadow-soft">
-                    Most popular
+                    Available now
                   </span>
-                ) : null}
+                ) : (
+                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-muted px-3 py-1 text-xs font-semibold text-muted-foreground shadow-soft">
+                    Coming soon
+                  </span>
+                )}
                 <CardHeader>
                   <CardTitle className="text-xl">{plan.name}</CardTitle>
                   <CardDescription className="text-sm leading-relaxed">
                     {plan.description}
                   </CardDescription>
                   <div className="mt-4 flex items-end gap-1">
-                    <span className="text-4xl font-semibold tracking-tight text-foreground">
+                    <span className="text-3xl font-semibold tracking-tight text-foreground">
                       {plan.price}
                     </span>
                     {plan.period ? (
@@ -129,12 +141,24 @@ export function PricingSection() {
                   </ul>
                 </CardContent>
                 <CardFooter>
-                  <Button
-                    className="h-11 w-full rounded-2xl"
-                    variant={plan.highlighted ? "default" : "outline"}
-                  >
-                    {plan.cta}
-                  </Button>
+                  {plan.href ? (
+                    <Button
+                      className="h-11 w-full rounded-2xl"
+                      variant={plan.highlighted ? "default" : "outline"}
+                      asChild
+                    >
+                      <Link to={plan.href}>{plan.cta}</Link>
+                    </Button>
+                  ) : (
+                    <Button
+                      className="h-11 w-full rounded-2xl"
+                      variant="outline"
+                      disabled
+                      title="This plan is not available yet."
+                    >
+                      {plan.cta}
+                    </Button>
+                  )}
                 </CardFooter>
               </Card>
             </motion.div>
