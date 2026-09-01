@@ -4,11 +4,11 @@ An AI-powered **customer support workspace** for support agents.
 
 SupportFlow AI helps an agent keep conversations in one inbox, publish a knowledge base, and generate **knowledge-grounded** answers and suggested replies. The agent reviews AI output before anything is sent.
 
-This repository is an MVP, not a full customer-support SaaS. There is no public customer chatbot, no billing, and no ticket or team product.
+This repository is a production-oriented AI customer-support workspace. There is no public customer chatbot and no billing yet.
 
 ---
 
-## What this MVP includes
+## What this product includes
 
 | Area | What works |
 |---|---|
@@ -16,10 +16,13 @@ This repository is an MVP, not a full customer-support SaaS. There is no public 
 | Conversations | Create threads, messages, replies, status (Open / Waiting / Closed / AI Resolved) |
 | Knowledge | CRUD, Draft/Published, Chroma ingestion, semantic search |
 | AI | RAG answers via Gemini, conversation suggested replies, source citations |
+| Customers | Owner-scoped customer directory with search, related conversations, and tickets |
+| Tickets | Owner-scoped tickets with status, priority, customer, and team-member assignment |
+| Team | Owner-scoped team directory (Owner / Admin / Agent) used to assign tickets |
 | Workspace | Conversation-derived analytics counts, account display, light/dark theme |
 | Isolation | Data is scoped to the signed-in account (`owner_id`) |
 
-**Intentionally not in this MVP:** public chatbot, tickets, customer CRM, team/invites/roles, notifications, global search, billing, SSO, Google OAuth, password reset, CSAT, email/Slack ingestion, autonomous sending.
+**Intentionally not included yet:** public chatbot, email invitations / teammate login, workspace_id multi-tenancy, notifications, global search, billing, SSO, Google OAuth, password reset, CSAT, email/Slack ingestion, autonomous sending.
 
 ---
 
@@ -39,7 +42,7 @@ flowchart LR
 |---|---|
 | Frontend | Agent UI at `http://localhost:5173` |
 | FastAPI | REST API at `http://localhost:8000/api/v1` |
-| MongoDB | Users, conversations, messages, knowledge documents |
+| MongoDB | Users, conversations, messages, knowledge documents, customers, tickets, team members |
 | ChromaDB | Embedded knowledge chunks for semantic retrieval |
 | Gemini | Grounded answer generation only (not embeddings) |
 
@@ -99,7 +102,7 @@ Embeddings use Chroma’s local MiniLM function, not Gemini.
 SupportFlow-AI/
 ├── backend/                 FastAPI application
 │   ├── app/
-│   │   ├── api/v1/          Auth, conversations, knowledge, AI routes
+│   │   ├── api/v1/          Auth, conversations, customers, tickets, team, knowledge, AI routes
 │   │   ├── auth/            JWT dependency
 │   │   ├── config/          Settings from backend/.env
 │   │   ├── core/            Security, logging, rate limiting
@@ -378,17 +381,17 @@ Backend tests use mongomock and ephemeral Chroma (`CHROMA_MODE=ephemeral` in `te
 | Account display + theme | Working |
 | Owner-scoped data | Working |
 | Login/register rate limiting | Working |
-| Tickets | Unavailable (MVP scope) |
-| Customers (CRM) | Unavailable (MVP scope) |
-| Team management | Unavailable (MVP scope) |
-| Notifications | Unavailable (MVP scope) |
+| Tickets | Working — owner-scoped CRUD, status/priority, assignment to team members |
+| Customers (CRM) | Working — owner-scoped directory, search, related conversations/tickets |
+| Team management | Working — owner-scoped directory (OWNER/ADMIN/AGENT). Members cannot log in yet |
+| Notifications | Unavailable |
 | Global search | Unavailable (MVP scope) |
 | Billing | Unavailable (MVP scope) |
 | Google OAuth | Unavailable (MVP scope) |
 | Password reset | Unavailable (MVP scope) |
 | Public customer chatbot | Unavailable (MVP scope) |
 
-Sidebar pages for tickets, customers, and team exist so the UI can say they are not connected. They are not fake working modules.
+Sidebar pages for tickets, customers, and team are connected to live owner-scoped APIs. Team members are a directory for ticket assignment; they cannot sign in, and email invitations are not sent.
 
 ---
 
@@ -396,7 +399,7 @@ Sidebar pages for tickets, customers, and team exist so the UI can say they are 
 
 - Passwords hashed with bcrypt (passlib)
 - JWT access tokens (`HS256`, `JWT_EXPIRE_MINUTES`, default 60)
-- Mongo queries filtered by `owner_id` for conversations, messages, and knowledge
+- Mongo queries filtered by `owner_id` for conversations, messages, knowledge, customers, tickets, and team members
 - Chroma retrieval filtered by `owner_id` and `status=Published`
 - In-memory rate limits on login/register (process-local; defaults 30 and 20 requests / 60s)
 - Production (`APP_ENV=production`): refuses placeholder `JWT_SECRET`, disables debug/docs, rejects public unauthenticated Chroma HTTP hosts
@@ -410,13 +413,15 @@ Not claimed: httpOnly cookie sessions, CSRF tokens, CSP, SSO, distributed rate l
 
 - Conversations are **created by the signed-in agent**; there is no public customer intake channel.
 - AI **assists**; it does not send replies or issue refunds on its own.
-- No tickets, CRM, team roles, billing, or email/Slack ingestion.
+- Team members are a **directory**, not separate login accounts. There are no email invitations. `INVITED` is a status flag only.
+- Only the registering owner account can authenticate. Assigned agents cannot sign in.
+- Isolation still uses `owner_id`. A later phase will migrate to workspace-based multi-tenancy.
 - JWT is stored in the browser (`localStorage`).
 - Auth rate limiting is **per Uvicorn process**, not shared across workers.
 - No production deploy config is shipped beyond environment flags.
 - Automated tests are unit-level (mocked DB / ephemeral Chroma). There is no E2E suite against real MongoDB + Chroma + Gemini.
 
-These are scope choices for the MVP, not silent failures of the core workspace.
+These are scope choices, not silent failures of the connected modules.
 
 ---
 

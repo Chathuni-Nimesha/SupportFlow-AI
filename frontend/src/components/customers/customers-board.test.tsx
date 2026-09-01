@@ -1,20 +1,307 @@
-import { describe, expect, it } from "vitest"
-import { screen } from "@testing-library/react"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+import userEvent from "@testing-library/user-event"
+import { screen, waitFor, within } from "@testing-library/react"
 
 import { CustomersBoard } from "@/components/customers/customers-board"
-import { renderWithProviders } from "@/test/test-utils"
+import {
+  createCustomer,
+  deleteCustomer,
+  getCustomer,
+  listCustomers,
+  updateCustomer,
+} from "@/services/customers"
+import { listTickets } from "@/services/tickets"
+import {
+  makeConversationApi,
+  makeCustomer,
+  makeCustomerDetail,
+} from "@/test/fixtures"
+import { deferred, renderWithProviders } from "@/test/test-utils"
+
+vi.mock("@/services/customers", () => ({
+  listCustomers: vi.fn(),
+  getCustomer: vi.fn(),
+  createCustomer: vi.fn(),
+  updateCustomer: vi.fn(),
+  deleteCustomer: vi.fn(),
+}))
+
+vi.mock("@/services/tickets", () => ({
+  listTickets: vi.fn(),
+  getTicket: vi.fn(),
+  createTicket: vi.fn(),
+  updateTicket: vi.fn(),
+  deleteTicket: vi.fn(),
+}))
 
 describe("CustomersBoard", () => {
-  it("renders an honest unavailable state without fake customer rows", () => {
+  beforeEach(() => {
+    vi.mocked(listCustomers).mockReset()
+    vi.mocked(getCustomer).mockReset()
+    vi.mocked(createCustomer).mockReset()
+    vi.mocked(updateCustomer).mockReset()
+    vi.mocked(deleteCustomer).mockReset()
+    vi.mocked(listTickets).mockReset()
+    vi.mocked(listTickets).mockResolvedValue([])
+  })
+
+  it("renders the customers board chrome", async () => {
+    vi.mocked(listCustomers).mockResolvedValue([])
+
     renderWithProviders(<CustomersBoard />)
 
-    expect(screen.getByRole("heading", { name: "Customers" })).toBeInTheDocument()
     expect(
-      screen.getByText("Customer management is not available yet."),
+      await screen.findByRole("heading", { name: "Customers" }),
     ).toBeInTheDocument()
-    expect(screen.getByText("Customer directory")).toBeInTheDocument()
-    expect(screen.getAllByText("Not available").length).toBeGreaterThanOrEqual(3)
-    expect(screen.queryByRole("table")).not.toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: "New customer" }),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText("Search customers")).toBeInTheDocument()
+    expect(screen.queryByText("Not available")).not.toBeInTheDocument()
+  })
+
+  it("shows a loading state while customers are fetched", async () => {
+    const pending = deferred<ReturnType<typeof makeCustomer>[]>()
+    vi.mocked(listCustomers).mockReturnValue(pending.promise)
+
+    renderWithProviders(<CustomersBoard />)
+
+    expect(await screen.findByText("Loading customers…")).toBeInTheDocument()
+
+    pending.resolve([])
+    expect(await screen.findByText("No customers yet")).toBeInTheDocument()
+  })
+
+  it("shows an empty state when there are no customers", async () => {
+    vi.mocked(listCustomers).mockResolvedValue([])
+
+    renderWithProviders(<CustomersBoard />)
+
+    expect(await screen.findByText("No customers yet")).toBeInTheDocument()
     expect(screen.queryByText("Elena Park")).not.toBeInTheDocument()
+  })
+
+  it("shows a list error and retries", async () => {
+    const user = userEvent.setup()
+    vi.mocked(listCustomers)
+      .mockRejectedValueOnce(new Error("Unable to load customers."))
+      .mockResolvedValueOnce([makeCustomer()])
+
+    renderWithProviders(<CustomersBoard />)
+
+    expect(
+      await screen.findByText("Couldn’t load customers"),
+    ).toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: "Retry" }))
+
+    expect(await screen.findByText("Elena Park")).toBeInTheDocument()
+    expect(listCustomers).toHaveBeenCalledTimes(2)
+  })
+
+  it("creates a customer and shows it in the list", async () => {
+    const user = userEvent.setup()
+    vi.mocked(listCustomers).mockResolvedValue([])
+    const created = makeCustomer({
+      id: "cust-created",
+      first_name: "Noah",
+      last_name: "Diaz",
+      email: "noah@orbit.example",
+      company: "Orbitly",
+      phone: null,
+      notes: null,
+    })
+    vi.mocked(createCustomer).mockImplementation(async () => {
+      vi.mocked(listCustomers).mockResolvedValue([created])
+      return created
+    })
+
+    renderWithProviders(<CustomersBoard />)
+    await screen.findByText("No customers yet")
+
+    await user.click(screen.getByRole("button", { name: "New customer" }))
+    expect(
+      await screen.findByRole("heading", { name: "New customer" }),
+    ).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText("First name"), "Noah")
+    await user.type(screen.getByLabelText("Last name"), "Diaz")
+    await user.type(screen.getByLabelText("Email"), "noah@orbit.example")
+    await user.type(screen.getByLabelText("Company"), "Orbitly")
+    await user.click(screen.getByRole("button", { name: "Create customer" }))
+
+    await waitFor(() => {
+      expect(createCustomer).toHaveBeenCalledWith({
+        first_name: "Noah",
+        last_name: "Diaz",
+        email: "noah@orbit.example",
+        phone: null,
+        company: "Orbitly",
+        notes: null,
+      })
+    })
+    expect(await screen.findByText("Noah Diaz")).toBeInTheDocument()
+    expect(
+      screen.queryByRole("heading", { name: "New customer" }),
+    ).not.toBeInTheDocument()
+  })
+
+  it("keeps the create sheet open and shows an error when create fails", async () => {
+    const user = userEvent.setup()
+    vi.mocked(listCustomers).mockResolvedValue([])
+    vi.mocked(createCustomer).mockRejectedValue(
+      new Error("Unable to create customer."),
+    )
+
+    renderWithProviders(<CustomersBoard />)
+    await user.click(await screen.findByRole("button", { name: "New customer" }))
+
+    await user.type(screen.getByLabelText("First name"), "Noah")
+    await user.type(screen.getByLabelText("Last name"), "Diaz")
+    await user.type(screen.getByLabelText("Email"), "noah@orbit.example")
+    await user.click(screen.getByRole("button", { name: "Create customer" }))
+
+    expect(
+      await screen.findByText("Unable to create customer."),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("heading", { name: "New customer" }),
+    ).toBeInTheDocument()
+  })
+
+  it("opens customer details including related conversations", async () => {
+    const user = userEvent.setup()
+    const customer = makeCustomer()
+    vi.mocked(listCustomers).mockResolvedValue([customer])
+    const pending = deferred<ReturnType<typeof makeCustomerDetail>>()
+    vi.mocked(getCustomer).mockReturnValue(pending.promise)
+
+    renderWithProviders(<CustomersBoard />)
+    await screen.findByText("Elena Park")
+
+    await user.click(screen.getByRole("button", { name: "View Elena Park" }))
+    expect(await screen.findByText("Loading customer…")).toBeInTheDocument()
+
+    pending.resolve(
+      makeCustomerDetail({
+        conversations: [
+          makeConversationApi({ subject: "Refund window" }),
+        ],
+      }),
+    )
+
+    const dialog = await screen.findByRole("dialog")
+    expect(await within(dialog).findByText("Elena Park")).toBeInTheDocument()
+    expect(within(dialog).getByText("Refund window")).toBeInTheDocument()
+    expect(
+      within(dialog).getByRole("link", { name: "Open conversations" }),
+    ).toHaveAttribute("href", "/dashboard/conversations")
+    expect(
+      await within(dialog).findByText("No tickets for this customer yet."),
+    ).toBeInTheDocument()
+    expect(
+      within(dialog).getByRole("link", { name: "Open tickets" }),
+    ).toHaveAttribute("href", "/dashboard/tickets")
+  })
+
+  it("populates the edit form and saves changes", async () => {
+    const user = userEvent.setup()
+    const customer = makeCustomer()
+    vi.mocked(listCustomers).mockResolvedValue([customer])
+    const updated = makeCustomer({
+      phone: "+1-555-0199",
+      notes: "VIP",
+    })
+    vi.mocked(updateCustomer).mockImplementation(async () => {
+      vi.mocked(listCustomers).mockResolvedValue([updated])
+      return updated
+    })
+
+    renderWithProviders(<CustomersBoard />)
+    await user.click(await screen.findByRole("button", { name: "Edit Elena Park" }))
+
+    expect(
+      await screen.findByRole("heading", { name: "Edit customer" }),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText("First name")).toHaveValue("Elena")
+    expect(screen.getByLabelText("Email")).toHaveValue("elena@acme.example")
+
+    await user.clear(screen.getByLabelText("Phone"))
+    await user.type(screen.getByLabelText("Phone"), "+1-555-0199")
+    await user.clear(screen.getByLabelText("Notes"))
+    await user.type(screen.getByLabelText("Notes"), "VIP")
+    await user.click(screen.getByRole("button", { name: "Save changes" }))
+
+    await waitFor(() => {
+      expect(updateCustomer).toHaveBeenCalledWith("cust-1", {
+        first_name: "Elena",
+        last_name: "Park",
+        email: "elena@acme.example",
+        phone: "+1-555-0199",
+        company: "Harbor Retail",
+        notes: "VIP",
+      })
+    })
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("heading", { name: "Edit customer" }),
+      ).not.toBeInTheDocument()
+    })
+  })
+
+  it("confirms deletion and removes the customer from the list", async () => {
+    const user = userEvent.setup()
+    vi.mocked(listCustomers).mockResolvedValue([makeCustomer()])
+    vi.mocked(deleteCustomer).mockImplementation(async () => {
+      vi.mocked(listCustomers).mockResolvedValue([])
+    })
+
+    renderWithProviders(<CustomersBoard />)
+    await screen.findByText("Elena Park")
+
+    await user.click(screen.getByRole("button", { name: "Delete Elena Park" }))
+    expect(await screen.findByText(/This cannot be undone/)).toBeInTheDocument()
+    expect(
+      screen.getByRole("heading", { name: "Delete customer" }),
+    ).toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: "Delete" }))
+
+    await waitFor(() => {
+      expect(deleteCustomer).toHaveBeenCalledWith("cust-1")
+    })
+    expect(await screen.findByText("No customers yet")).toBeInTheDocument()
+    expect(screen.queryByText("Elena Park")).not.toBeInTheDocument()
+  })
+
+  it("searches customers through the API", async () => {
+    const user = userEvent.setup()
+    const elena = makeCustomer()
+    const noah = makeCustomer({
+      id: "cust-2",
+      first_name: "Noah",
+      last_name: "Diaz",
+      email: "noah@orbit.example",
+      company: "Orbitly",
+    })
+    vi.mocked(listCustomers).mockImplementation(async (query?: string) => {
+      if (query?.toLowerCase() === "harbor") return [elena]
+      if (query) return []
+      return [elena, noah]
+    })
+
+    renderWithProviders(<CustomersBoard />)
+    expect(await screen.findByText("Elena Park")).toBeInTheDocument()
+    expect(screen.getByText("Noah Diaz")).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText("Search customers"), "Harbor")
+
+    await waitFor(() => {
+      expect(listCustomers).toHaveBeenCalledWith("Harbor")
+    })
+    expect(await screen.findByText("Elena Park")).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.queryByText("Noah Diaz")).not.toBeInTheDocument()
+    })
   })
 })
