@@ -426,7 +426,7 @@ Not claimed: httpOnly cookie sessions, CSRF tokens, CSP, SSO, distributed rate l
 - AI **assists**; it does not send replies or issue refunds on its own.
 - Team invitations are not emailed. `INVITED` is a status flag only.
 - Authorization uses the ACTIVE `team_members` role in the selected workspace. JWT does not carry `workspace_id` or `role`.
-- `owner_id` is still stored for compatibility and is not the tenant boundary for migrated resources.
+- `owner_id` is still stored for compatibility and is not the tenant boundary for migrated resources. Unique `(owner_id, email)` indexes are obsolete; drop leftovers with `python -m scripts.cleanup_owner_id` (not on startup).
 - JWT is stored in the browser (`localStorage`).
 - Auth and AI/search rate limiting is **per Uvicorn process**, not shared across workers.
 - Conversation **messages** are not paginated (a thread is loaded as a unit; lists of conversations/customers/tickets/team/knowledge documents are).

@@ -1,4 +1,4 @@
-"""Phase 1A workspace schema tests. Isolation still uses owner_id."""
+"""Phase 1A workspace schema tests. Runtime isolation uses workspace_id."""
 
 from collections.abc import AsyncIterator
 
@@ -332,7 +332,7 @@ async def test_owner_id_indexes_are_preserved(indexed_db) -> None:
     assert has_key(conversations, [("owner_id", 1), ("status", 1)])
     assert has_key(conversations, [("workspace_id", 1), ("updated_at", -1)])
     assert has_key(conversations, [("workspace_id", 1), ("status", 1)])
-    assert has_key(customers, [("owner_id", 1), ("email", 1)])
+    assert not has_key(customers, [("owner_id", 1), ("email", 1)])
     assert has_key(customers, [("workspace_id", 1), ("email", 1)])
     assert has_key(tickets, [("owner_id", 1), ("updated_at", -1)])
     assert has_key(tickets, [("owner_id", 1), ("customer_id", 1)])
@@ -341,7 +341,7 @@ async def test_owner_id_indexes_are_preserved(indexed_db) -> None:
     assert has_key(tickets, [("workspace_id", 1), ("priority", 1)])
     assert has_key(tickets, [("workspace_id", 1), ("assignee_id", 1)])
     assert has_key(tickets, [("workspace_id", 1), ("customer_id", 1)])
-    assert has_key(team_members, [("owner_id", 1), ("email", 1)])
+    assert not has_key(team_members, [("owner_id", 1), ("email", 1)])
     assert has_key(team_members, [("owner_id", 1), ("updated_at", -1)])
     assert has_key(team_members, [("owner_id", 1), ("role", 1)])
     assert has_key(team_members, [("owner_id", 1), ("status", 1)])
@@ -355,32 +355,22 @@ async def test_owner_id_indexes_are_preserved(indexed_db) -> None:
     assert has_key(knowledge, [("workspace_id", 1), ("updated_at", -1)])
     assert has_key(knowledge, [("workspace_id", 1), ("status", 1)])
 
-    customer_email = None
     workspace_email = None
     for spec in customers.values():
         keys = list(spec.get("key") or [])
-        if keys == [("owner_id", 1), ("email", 1)]:
-            customer_email = spec
         if keys == [("workspace_id", 1), ("email", 1)]:
             workspace_email = spec
-    assert customer_email is not None
-    assert customer_email.get("unique") is True
     assert workspace_email is not None
     assert workspace_email.get("unique") is True
 
-    member_owner_email = None
     member_workspace_email = None
     member_workspace_user = None
     for spec in team_members.values():
         keys = list(spec.get("key") or [])
-        if keys == [("owner_id", 1), ("email", 1)]:
-            member_owner_email = spec
         if keys == [("workspace_id", 1), ("email", 1)]:
             member_workspace_email = spec
         if keys == [("workspace_id", 1), ("user_id", 1)]:
             member_workspace_user = spec
-    assert member_owner_email is not None
-    assert member_owner_email.get("unique") is True
     assert member_workspace_email is not None
     assert member_workspace_email.get("unique") is True
     assert member_workspace_user is not None
@@ -466,3 +456,53 @@ async def test_team_members_without_user_id_can_share_a_workspace(indexed_db) ->
     await indexed_db.team_members.insert_one(first)
     await indexed_db.team_members.insert_one(second)
     assert await indexed_db.team_members.count_documents({"workspace_id": WORKSPACE_ID}) == 2
+
+
+@pytest.mark.asyncio
+async def test_same_customer_email_allowed_for_same_owner_in_different_workspaces(
+    indexed_db,
+) -> None:
+    first = build_customer_document(
+        owner_id=OWNER_ID,
+        workspace_id=WORKSPACE_ID,
+        first_name="Elena",
+        last_name="Park",
+        email="elena@example.com",
+    )
+    second = build_customer_document(
+        owner_id=OWNER_ID,
+        workspace_id="workspace-2",
+        first_name="Elena",
+        last_name="Park",
+        email="elena@example.com",
+    )
+    await indexed_db.customers.insert_one(first)
+    await indexed_db.customers.insert_one(second)
+    assert await indexed_db.customers.count_documents({"email": "elena@example.com"}) == 2
+
+
+@pytest.mark.asyncio
+async def test_same_team_member_email_allowed_for_same_creator_in_different_workspaces(
+    indexed_db,
+) -> None:
+    first = build_team_member_document(
+        owner_id=OWNER_ID,
+        first_name="Sarah",
+        last_name="Perera",
+        email="sarah@example.com",
+        role="AGENT",
+        workspace_id=WORKSPACE_ID,
+    )
+    second = build_team_member_document(
+        owner_id=OWNER_ID,
+        first_name="Sarah",
+        last_name="Perera",
+        email="sarah@example.com",
+        role="AGENT",
+        workspace_id="workspace-2",
+    )
+    await indexed_db.team_members.insert_one(first)
+    await indexed_db.team_members.insert_one(second)
+    assert await indexed_db.team_members.count_documents(
+        {"email": "sarah@example.com"},
+    ) == 2
