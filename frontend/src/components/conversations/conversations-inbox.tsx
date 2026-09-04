@@ -19,6 +19,8 @@ import type {
   ConversationFilter,
   ConversationStatus,
 } from "@/types/conversations"
+import type { Customer } from "@/types/customers"
+import { PICKER_PAGE_SIZE } from "@/types/pagination"
 import {
   formatRelativeTime,
   mapConversationFromApi,
@@ -34,6 +36,7 @@ import {
   sendConversationMessage,
   updateConversation,
 } from "@/services/conversations"
+import { listCustomers } from "@/services/customers"
 import { Button } from "@/components/ui/button"
 import {
   Sheet,
@@ -111,6 +114,8 @@ export function ConversationsInbox() {
   )
   const [createError, setCreateError] = useState<string | null>(null)
   const [isCreating, setIsCreating] = useState(false)
+  const [customers, setCustomers] = useState<Customer[]>([])
+  const [customersLoading, setCustomersLoading] = useState(false)
 
   const filtered = useMemo(
     () => filterConversations(items, filter, search),
@@ -147,6 +152,27 @@ export function ConversationsInbox() {
       setListLoading(false)
     }
   }, [workspaceId])
+
+  useEffect(() => {
+    if (!createOpen) return
+
+    let cancelled = false
+    setCustomersLoading(true)
+    void listCustomers({ page: 1, pageSize: PICKER_PAGE_SIZE })
+      .then((page) => {
+        if (!cancelled) setCustomers(page.items)
+      })
+      .catch(() => {
+        if (!cancelled) setCustomers([])
+      })
+      .finally(() => {
+        if (!cancelled) setCustomersLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [createOpen, workspaceId])
 
   useEffect(() => {
     setItems([])
@@ -465,6 +491,8 @@ export function ConversationsInbox() {
             onChange={setCreateValues}
             onSubmit={() => void handleCreate()}
             onCancel={closeCreate}
+            customers={customers}
+            customersLoading={customersLoading}
             isSaving={isCreating}
             error={createError}
           />

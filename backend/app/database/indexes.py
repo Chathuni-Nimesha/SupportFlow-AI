@@ -35,6 +35,12 @@ async def ensure_indexes() -> None:
     await db[CONVERSATIONS_COLLECTION].create_index(
         [("workspace_id", 1), ("status", 1)],
     )
+    await db[CONVERSATIONS_COLLECTION].create_index(
+        [("workspace_id", 1), ("customer_id", 1)],
+    )
+    await db[CONVERSATIONS_COLLECTION].create_index(
+        [("workspace_id", 1), ("customer_email", 1)],
+    )
     await db[MESSAGES_COLLECTION].create_index(
         [("conversation_id", 1), ("created_at", 1)],
     )

@@ -61,13 +61,14 @@ export function CustomerDetailPanel({
                 Related conversations
               </h3>
               <p className="mt-1 text-xs text-muted-foreground">
-                Matched by email in this workspace. Conversations are not
+                Linked in this workspace by customer. Unlinked older
+                conversations still match by email. Conversations are not
                 deleted when a customer is removed.
               </p>
             </div>
             {customer.conversations.length === 0 ? (
               <p className="rounded-2xl border border-dashed border-border bg-card px-4 py-6 text-sm text-muted-foreground">
-                No conversations use this email yet.
+                No related conversations yet.
               </p>
             ) : (
               <ul className="space-y-2">

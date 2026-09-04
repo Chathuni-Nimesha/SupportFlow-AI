@@ -132,19 +132,34 @@ async def _get_workspace_customer(
 
 async def _related_conversations(
     workspace_id: str,
+    customer_id: str,
     email: str,
 ) -> list[ConversationResponse]:
     workspace_id = _require_workspace_id(workspace_id)
+    customer_id = _require_customer_id(customer_id)
     normalized_email = str(email or "").strip().lower()
+    filters: dict[str, Any] = {
+        "workspace_id": workspace_id,
+        "$or": [
+            {"customer_id": customer_id},
+            {
+                "customer_email": normalized_email,
+                "customer_id": {"$exists": False},
+            },
+            {
+                "customer_email": normalized_email,
+                "customer_id": None,
+            },
+            {
+                "customer_email": normalized_email,
+                "customer_id": "",
+            },
+        ],
+    }
     try:
         cursor = (
             _conversations()
-            .find(
-                {
-                    "workspace_id": workspace_id,
-                    "customer_email": normalized_email,
-                },
-            )
+            .find(filters)
             .sort("updated_at", -1)
         )
         documents = await cursor.to_list(length=100)
@@ -200,6 +215,7 @@ async def get_customer(
     payload = serialize_customer(document)
     conversations = await _related_conversations(
         workspace_id,
+        str(document["_id"]),
         payload["email"],
     )
     return CustomerDetailResponse.model_validate(
