@@ -11,7 +11,7 @@ import {
 const unavailableItems = [
   {
     label: "Ticket analytics",
-    message: "No tickets backend is connected.",
+    message: "Ticket volume, assignment, and SLA analytics are not implemented. Tickets themselves are available in the workspace.",
   },
   {
     label: "CSAT",

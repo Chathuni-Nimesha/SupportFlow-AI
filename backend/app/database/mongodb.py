@@ -70,3 +70,14 @@ def get_database() -> AsyncIOMotorDatabase:
             "MongoDB database is not initialized. Call connect_mongodb() first."
         )
     return _database
+
+
+async def ping_mongodb() -> bool:
+    """Return True when the configured MongoDB client answers ping."""
+    if _client is None:
+        return False
+    try:
+        await _client.admin.command("ping")
+        return True
+    except Exception:
+        return False

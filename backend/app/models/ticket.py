@@ -4,6 +4,8 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
+from app.models.workspace import apply_optional_workspace_id
+
 
 TICKETS_COLLECTION = "tickets"
 
@@ -36,10 +38,11 @@ def build_ticket_document(
     status: str = "OPEN",
     priority: str = "MEDIUM",
     assignee_id: str | None = None,
+    workspace_id: str | None = None,
 ) -> dict[str, Any]:
     """Create a new ticket document ready for insertion."""
     now = utc_now()
-    return {
+    document = {
         "_id": str(uuid4()),
         "owner_id": owner_id,
         "customer_id": customer_id,
@@ -51,6 +54,7 @@ def build_ticket_document(
         "created_at": now,
         "updated_at": now,
     }
+    return apply_optional_workspace_id(document, workspace_id)
 
 
 def serialize_ticket(
@@ -74,4 +78,7 @@ def serialize_ticket(
         "customer": customer,
         "assignee": assignee,
     }
+    workspace_id = document.get("workspace_id")
+    if workspace_id:
+        payload["workspace_id"] = str(workspace_id)
     return payload

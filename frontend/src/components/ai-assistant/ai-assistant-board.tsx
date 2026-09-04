@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { motion } from "framer-motion"
 
 import { AiQuestionForm } from "@/components/ai-assistant/ai-question-form"
@@ -6,15 +6,26 @@ import { AiResultPanel } from "@/components/ai-assistant/ai-result-panel"
 import { generateAiAnswer } from "@/services/ai"
 import type { AiAnswer } from "@/types/ai"
 import { getApiErrorMessage } from "@/utils/api-error"
+import { useAuth } from "@/context/auth-provider"
 
 type ResultStatus = "idle" | "loading" | "success" | "error"
 
 export function AiAssistantBoard() {
+  const { currentWorkspace } = useAuth()
+  const workspaceId = currentWorkspace?.id ?? null
   const [question, setQuestion] = useState("")
   const [lastQuestion, setLastQuestion] = useState("")
   const [status, setStatus] = useState<ResultStatus>("idle")
   const [result, setResult] = useState<AiAnswer | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    setQuestion("")
+    setLastQuestion("")
+    setStatus("idle")
+    setResult(null)
+    setError(null)
+  }, [workspaceId])
 
   const ask = async (value: string) => {
     const cleaned = value.trim()

@@ -1,4 +1,11 @@
 import { api } from "@/services/api"
+import {
+  DEFAULT_PAGE_SIZE,
+  mapPaginated,
+  type ListPaginationParams,
+  type PaginatedApi,
+  type PaginatedList,
+} from "@/types/pagination"
 import type {
   Customer,
   CustomerCreatePayload,
@@ -6,12 +13,22 @@ import type {
   CustomerUpdatePayload,
 } from "@/types/customers"
 
-export async function listCustomers(query?: string): Promise<Customer[]> {
-  const trimmed = query?.trim()
-  const { data } = await api.get<Customer[]>("/customers", {
-    params: trimmed ? { q: trimmed } : undefined,
+export type CustomerListParams = ListPaginationParams & {
+  query?: string
+}
+
+export async function listCustomers(
+  params: CustomerListParams = {},
+): Promise<PaginatedList<Customer>> {
+  const trimmed = params.query?.trim()
+  const { data } = await api.get<PaginatedApi<Customer>>("/customers", {
+    params: {
+      q: trimmed || undefined,
+      page: params.page ?? 1,
+      page_size: params.pageSize ?? DEFAULT_PAGE_SIZE,
+    },
   })
-  return data
+  return mapPaginated(data)
 }
 
 export async function getCustomer(customerId: string): Promise<CustomerDetail> {

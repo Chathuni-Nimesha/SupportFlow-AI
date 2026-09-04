@@ -16,6 +16,7 @@ from app.services.rag_service import (
     build_context_from_hits,
     build_sources_from_hits,
 )
+from app.database.chroma import reset_chroma_client
 
 
 SAMPLE_HITS = [
@@ -96,13 +97,13 @@ async def test_answer_with_rag_success_calls_retrieval_and_gemini() -> None:
         ) as gemini_mock,
     ):
         result = await answer_with_rag(
-            owner_id="owner-a",
+            workspace_id="workspace-a",
             question="Can I get a refund after 10 days?",
             top_k=5,
         )
 
     retrieve_mock.assert_awaited_once_with(
-        owner_id="owner-a",
+        workspace_id="workspace-a",
         query="Can I get a refund after 10 days?",
         top_k=5,
     )
@@ -132,7 +133,7 @@ async def test_answer_with_rag_no_hits_skips_gemini() -> None:
         ) as gemini_mock,
     ):
         result = await answer_with_rag(
-            owner_id="owner-a",
+            workspace_id="workspace-a",
             question="Unknown topic?",
             top_k=5,
         )
@@ -155,7 +156,7 @@ async def test_answer_with_rag_retrieval_error() -> None:
 
         with pytest.raises(RagRetrievalError):
             await answer_with_rag(
-                owner_id="owner-a",
+                workspace_id="workspace-a",
                 question="Refund policy?",
                 top_k=5,
             )
@@ -177,7 +178,7 @@ async def test_answer_with_rag_gemini_configuration_error() -> None:
     ):
         with pytest.raises(GeminiConfigurationError):
             await answer_with_rag(
-                owner_id="owner-a",
+                workspace_id="workspace-a",
                 question="Refund policy?",
                 top_k=5,
             )
@@ -207,7 +208,7 @@ async def test_answer_with_rag_unexpected_gemini_failure_does_not_log_raw_except
     ):
         with pytest.raises(GeminiProviderError) as exc_info:
             await answer_with_rag(
-                owner_id="owner-a",
+                workspace_id="workspace-a",
                 question="Refund policy?",
                 top_k=5,
             )
@@ -264,6 +265,7 @@ async def test_ai_answer_endpoint_success(
                 "question": "Can I get a refund after 10 days?",
                 "top_k": 5,
                 "owner_id": "should-be-ignored",
+                "workspace_id": "should-be-ignored",
             },
         )
 
@@ -274,9 +276,13 @@ async def test_ai_answer_endpoint_success(
     assert body["used_generation"] is True
     assert body["sources"][0]["document_id"] == "doc-1"
 
+    me = await client.get("/api/v1/auth/me", headers=auth_headers)
+    workspace_id = me.json()["default_workspace_id"]
     kwargs = rag_mock.await_args.kwargs
-    assert "owner_id" in kwargs
-    assert kwargs["owner_id"] != "should-be-ignored"
+    assert kwargs["workspace_id"] == workspace_id
+    assert kwargs["workspace_id"] != "should-be-ignored"
+    assert kwargs["workspace_id"] != me.json()["id"]
+    assert "owner_id" not in kwargs
     assert kwargs["question"] == "Can I get a refund after 10 days?"
     assert kwargs["top_k"] == 5
 
@@ -364,3 +370,72 @@ async def test_ai_answer_endpoint_maps_provider_error(
 
     assert response.status_code == 503
     assert response.json()["detail"] == "upstream unavailable"
+
+
+@pytest.mark.asyncio
+async def test_rag_cannot_retrieve_other_workspace_knowledge(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    sample_register_payload: dict,
+) -> None:
+    reset_chroma_client()
+    created = await client.post(
+        "/api/v1/knowledge-documents",
+        headers=auth_headers,
+        json={
+            "title": "Refund policy",
+            "content": "Customers may request a refund within 14 days of purchase.",
+            "status": "Published",
+        },
+    )
+    assert created.status_code == 201
+    workspace_a = created.json()["workspace_id"]
+
+    other_payload = {
+        **sample_register_payload,
+        "email": "rag-other@acme.example",
+    }
+    await client.post("/api/v1/auth/register", json=other_payload)
+    other_login = await client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": other_payload["email"],
+            "password": other_payload["password"],
+        },
+    )
+    other_me = await client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {other_login.json()['access_token']}"},
+    )
+    workspace_b = other_me.json()["default_workspace_id"]
+    assert workspace_a != workspace_b
+
+    with patch(
+        "app.services.rag_service.generate_grounded_answer",
+        new_callable=AsyncMock,
+        return_value="should not be used for workspace B",
+    ) as gemini_mock:
+        foreign = await answer_with_rag(
+            workspace_id=workspace_b,
+            question="What is the refund policy?",
+            top_k=5,
+        )
+    gemini_mock.assert_not_awaited()
+    assert foreign["retrieved_count"] == 0
+    assert foreign["used_generation"] is False
+    assert foreign["answer"] == INSUFFICIENT_KNOWLEDGE_ANSWER
+
+    with patch(
+        "app.services.rag_service.generate_grounded_answer",
+        new_callable=AsyncMock,
+        return_value="Refunds are available within 14 days.",
+    ) as gemini_mock:
+        local = await answer_with_rag(
+            workspace_id=workspace_a,
+            question="What is the refund policy?",
+            top_k=5,
+        )
+    gemini_mock.assert_awaited_once()
+    assert local["retrieved_count"] >= 1
+    assert local["used_generation"] is True
+    assert local["sources"][0]["metadata"]["workspace_id"] == workspace_a

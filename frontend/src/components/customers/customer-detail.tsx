@@ -137,8 +137,9 @@ function DetailField({
 function RelatedTickets({ customerId }: { customerId: string }) {
   const ticketsQuery = useQuery({
     queryKey: ["tickets", "list", { customerId }],
-    queryFn: () => listTickets({ customerId }),
+    queryFn: () => listTickets({ customerId, page: 1, pageSize: 100 }),
   })
+  const tickets = ticketsQuery.data?.items ?? []
 
   return (
     <div className="space-y-3">
@@ -156,9 +157,9 @@ function RelatedTickets({ customerId }: { customerId: string }) {
         <p className="text-sm text-rose-700 dark:text-rose-300">
           Unable to load related tickets.
         </p>
-      ) : ticketsQuery.data?.length ? (
+      ) : tickets.length ? (
         <ul className="space-y-2">
-          {ticketsQuery.data.map((ticket) => (
+          {tickets.map((ticket) => (
             <li
               key={ticket.id}
               className="rounded-2xl border border-border/70 bg-background px-3.5 py-3"

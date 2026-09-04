@@ -110,31 +110,34 @@ def build_sources_from_hits(hits: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 async def answer_with_rag(
     *,
-    owner_id: str,
+    workspace_id: str,
     question: str,
     top_k: int = 5,
 ) -> dict[str, Any]:
     """
-    Orchestrate retrieval + grounded generation for one owner-scoped question.
+    Orchestrate retrieval + grounded generation for one workspace-scoped question.
 
     Does not invent knowledge. If nothing is retrieved, returns a safe
     insufficient-knowledge answer without calling Gemini.
     """
-    cleaned_owner = (owner_id or "").strip()
-    if not cleaned_owner:
-        raise RagValidationError("Owner id is required.")
+    cleaned_workspace = (workspace_id or "").strip()
+    if not cleaned_workspace:
+        raise RagValidationError("Workspace id is required.")
 
     cleaned_question = _validate_question(question)
     safe_top_k = normalize_top_k(top_k)
 
     try:
         hits = await retrieve_knowledge(
-            owner_id=cleaned_owner,
+            workspace_id=cleaned_workspace,
             query=cleaned_question,
             top_k=safe_top_k,
         )
     except Exception as exc:
-        logger.exception("RAG retrieval failed for owner_id=%s", cleaned_owner)
+        logger.exception(
+            "RAG retrieval failed for workspace_id=%s",
+            cleaned_workspace,
+        )
         raise RagRetrievalError(
             "Knowledge retrieval failed. Please try again later.",
         ) from exc

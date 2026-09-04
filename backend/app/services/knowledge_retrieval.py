@@ -29,6 +29,16 @@ def normalize_top_k(top_k: int | None) -> int:
     return max(MIN_TOP_K, min(value, MAX_TOP_K))
 
 
+def chroma_published_workspace_filter(workspace_id: str) -> dict[str, Any]:
+    """Chroma 1.x metadata filter: current workspace AND published only."""
+    return {
+        "$and": [
+            {"workspace_id": workspace_id},
+            {"status": PUBLISHED_STATUS},
+        ],
+    }
+
+
 def distance_to_score(distance: float | None) -> float | None:
     """
     Convert Chroma cosine distance to a similarity-like score.
@@ -51,7 +61,7 @@ def distance_to_score(distance: float | None) -> float | None:
 
 def _query_knowledge_sync(
     *,
-    owner_id: str,
+    workspace_id: str,
     query: str,
     top_k: int,
 ) -> list[dict[str, Any]]:
@@ -59,12 +69,7 @@ def _query_knowledge_sync(
     raw = collection.query(
         query_texts=[query],
         n_results=top_k,
-        where={
-            "$and": [
-                {"owner_id": owner_id},
-                {"status": PUBLISHED_STATUS},
-            ],
-        },
+        where=chroma_published_workspace_filter(workspace_id),
         include=["documents", "metadatas", "distances"],
     )
 
@@ -96,19 +101,22 @@ def _query_knowledge_sync(
 
 
 async def retrieve_knowledge(
-    owner_id: str,
+    workspace_id: str,
     query: str,
     top_k: int = DEFAULT_TOP_K,
 ) -> list[dict[str, Any]]:
     """
-    Retrieve owner-scoped published knowledge chunks for a query.
+    Retrieve workspace-scoped published knowledge chunks for a query.
+
+    Tenant isolation is applied in the Chroma ``where`` filter. Results are
+    not post-filtered after an unscoped search.
 
     Uses the same Chroma collection and embedding function as ingestion.
     Returns an empty list when the query is blank or no matches exist.
     """
-    cleaned_owner = (owner_id or "").strip()
+    cleaned_workspace = (workspace_id or "").strip()
     cleaned_query = (query or "").strip()
-    if not cleaned_owner or not cleaned_query:
+    if not cleaned_workspace or not cleaned_query:
         return []
 
     safe_top_k = normalize_top_k(top_k)
@@ -116,13 +124,13 @@ async def retrieve_knowledge(
     try:
         return await asyncio.to_thread(
             _query_knowledge_sync,
-            owner_id=cleaned_owner,
+            workspace_id=cleaned_workspace,
             query=cleaned_query,
             top_k=safe_top_k,
         )
     except Exception:
         logger.exception(
-            "Knowledge retrieval failed for owner_id=%s",
-            cleaned_owner,
+            "Knowledge retrieval failed for workspace_id=%s",
+            cleaned_workspace,
         )
         raise

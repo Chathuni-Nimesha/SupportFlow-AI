@@ -4,6 +4,8 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
+from app.models.workspace import apply_optional_workspace_id
+
 
 KNOWLEDGE_DOCUMENTS_COLLECTION = "knowledge_documents"
 
@@ -30,13 +32,14 @@ def build_knowledge_document(
     source: str | None = None,
     status: str = "Draft",
     tags: list[str] | None = None,
+    workspace_id: str | None = None,
 ) -> dict[str, Any]:
     """Create a new knowledge document ready for insertion."""
     now = utc_now()
     cleaned_tags = [
         tag.strip() for tag in (tags or []) if isinstance(tag, str) and tag.strip()
     ]
-    return {
+    document = {
         "_id": str(uuid4()),
         "owner_id": owner_id,
         "title": title.strip(),
@@ -52,11 +55,12 @@ def build_knowledge_document(
         "created_at": now,
         "updated_at": now,
     }
+    return apply_optional_workspace_id(document, workspace_id)
 
 
 def serialize_knowledge_document(document: dict[str, Any]) -> dict[str, Any]:
     """Map a MongoDB knowledge document to a public payload."""
-    return {
+    payload = {
         "id": str(document["_id"]),
         "owner_id": document["owner_id"],
         "title": document["title"],
@@ -72,3 +76,7 @@ def serialize_knowledge_document(document: dict[str, Any]) -> dict[str, Any]:
         "created_at": document["created_at"],
         "updated_at": document["updated_at"],
     }
+    workspace_id = document.get("workspace_id")
+    if workspace_id:
+        payload["workspace_id"] = str(workspace_id)
+    return payload

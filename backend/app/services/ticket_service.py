@@ -9,6 +9,7 @@ from fastapi import HTTPException, status
 from pymongo.errors import PyMongoError
 
 from app.core.logging import get_logger
+from app.core.pagination import paginate_find, paginated_payload
 from app.database.mongodb import get_database
 from app.models.customer import CUSTOMERS_COLLECTION
 from app.models.ticket import (
@@ -78,6 +79,20 @@ def _title_description_search(cleaned: str) -> dict[str, Any]:
     return {"$and": clauses}
 
 
+def _require_id(value: str, label: str) -> str:
+    cleaned = (value or "").strip()
+    if not cleaned:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid {label}.",
+        )
+    return cleaned
+
+
+def _ticket_filter(ticket_id: str, workspace_id: str) -> dict[str, str]:
+    return {"_id": ticket_id, "workspace_id": workspace_id}
+
+
 def _customer_summary(document: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": str(document["_id"]),
@@ -87,16 +102,16 @@ def _customer_summary(document: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-async def _get_owned_customer(customer_id: str, owner_id: str) -> dict[str, Any]:
-    if not customer_id or not customer_id.strip():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid customer id.",
-        )
+async def _get_workspace_customer(
+    customer_id: str,
+    workspace_id: str,
+) -> dict[str, Any]:
+    customer_id = _require_id(customer_id, "customer id")
+    workspace_id = _require_id(workspace_id, "workspace id")
 
     try:
         document = await _customers().find_one(
-            {"_id": customer_id, "owner_id": owner_id},
+            {"_id": customer_id, "workspace_id": workspace_id},
         )
     except PyMongoError as exc:
         raise _db_error("fetch customer for ticket", exc) from exc
@@ -109,16 +124,16 @@ async def _get_owned_customer(customer_id: str, owner_id: str) -> dict[str, Any]
     return document
 
 
-async def _get_owned_ticket(ticket_id: str, owner_id: str) -> dict[str, Any]:
-    if not ticket_id or not ticket_id.strip():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid ticket id.",
-        )
+async def _get_workspace_ticket(
+    ticket_id: str,
+    workspace_id: str,
+) -> dict[str, Any]:
+    ticket_id = _require_id(ticket_id, "ticket id")
+    workspace_id = _require_id(workspace_id, "workspace id")
 
     try:
         document = await _tickets().find_one(
-            {"_id": ticket_id, "owner_id": owner_id},
+            _ticket_filter(ticket_id, workspace_id),
         )
     except PyMongoError as exc:
         raise _db_error("fetch ticket", exc) from exc
@@ -132,7 +147,7 @@ async def _get_owned_ticket(ticket_id: str, owner_id: str) -> dict[str, Any]:
 
 
 async def _customer_summaries(
-    owner_id: str,
+    workspace_id: str,
     customer_ids: list[str],
 ) -> dict[str, dict[str, Any]]:
     unique_ids = [cid for cid in dict.fromkeys(customer_ids) if cid]
@@ -141,7 +156,7 @@ async def _customer_summaries(
 
     try:
         cursor = _customers().find(
-            {"_id": {"$in": unique_ids}, "owner_id": owner_id},
+            {"_id": {"$in": unique_ids}, "workspace_id": workspace_id},
         )
         documents = await cursor.to_list(length=len(unique_ids))
     except PyMongoError as exc:
@@ -168,22 +183,26 @@ def _to_response(
 
 
 async def list_tickets(
-    owner_id: str,
+    workspace_id: str,
     *,
+    owner_id: str,
     query: str | None = None,
     status_filter: str | None = None,
     priority_filter: str | None = None,
     assignee_id: str | None = None,
     unassigned: bool = False,
     customer_id: str | None = None,
-) -> list[TicketResponse]:
+    page: int = 1,
+    page_size: int = 20,
+) -> dict[str, Any]:
+    workspace_id = _require_id(workspace_id, "workspace id")
     if unassigned and assignee_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Use either assignee_id or unassigned, not both.",
         )
 
-    filters: dict[str, Any] = {"owner_id": owner_id}
+    filters: dict[str, Any] = {"workspace_id": workspace_id}
     if status_filter:
         filters["status"] = status_filter
     if priority_filter:
@@ -200,44 +219,66 @@ async def list_tickets(
         filters.update(_title_description_search(cleaned))
 
     try:
-        cursor = _tickets().find(filters).sort("updated_at", -1)
-        documents = await cursor.to_list(length=500)
+        documents, total = await paginate_find(
+            _tickets(),
+            filters,
+            page=page,
+            page_size=page_size,
+        )
     except PyMongoError as exc:
         raise _db_error("list tickets", exc) from exc
 
     customers = await _customer_summaries(
-        owner_id,
+        workspace_id,
         [doc["customer_id"] for doc in documents],
     )
     assignees = await team_service.member_summaries(
-        owner_id,
+        workspace_id,
         [doc.get("assignee_id") for doc in documents if doc.get("assignee_id")],
+        owner_id=owner_id,
     )
-    return [_to_response(doc, customers, assignees) for doc in documents]
+    items = [_to_response(doc, customers, assignees) for doc in documents]
+    return paginated_payload(
+        items,
+        page=page,
+        page_size=page_size,
+        total=total,
+    )
 
 
-async def get_ticket(ticket_id: str, owner_id: str) -> TicketResponse:
-    document = await _get_owned_ticket(ticket_id, owner_id)
-    customers = await _customer_summaries(owner_id, [document["customer_id"]])
+async def get_ticket(
+    ticket_id: str,
+    workspace_id: str,
+    *,
+    owner_id: str,
+) -> TicketResponse:
+    document = await _get_workspace_ticket(ticket_id, workspace_id)
+    customers = await _customer_summaries(workspace_id, [document["customer_id"]])
     assignees = await team_service.member_summaries(
-        owner_id,
+        workspace_id,
         [document["assignee_id"]] if document.get("assignee_id") else [],
+        owner_id=owner_id,
     )
     return _to_response(document, customers, assignees)
 
 
 async def create_ticket(
+    *,
+    workspace_id: str,
     owner_id: str,
     payload: TicketCreateRequest,
 ) -> TicketResponse:
-    customer = await _get_owned_customer(payload.customer_id, owner_id)
+    workspace_id = _require_id(workspace_id, "workspace id")
+    customer = await _get_workspace_customer(payload.customer_id, workspace_id)
     assignee_id = await team_service.require_assignable_member(
         payload.assignee_id,
-        owner_id,
+        workspace_id,
+        owner_id=owner_id,
     )
 
     document = build_ticket_document(
         owner_id=owner_id,
+        workspace_id=workspace_id,
         customer_id=str(customer["_id"]),
         title=payload.title,
         description=payload.description,
@@ -252,8 +293,9 @@ async def create_ticket(
         raise _db_error("create ticket", exc) from exc
 
     assignees = await team_service.member_summaries(
-        owner_id,
+        workspace_id,
         [assignee_id] if assignee_id else [],
+        owner_id=owner_id,
     )
     return _to_response(
         document,
@@ -264,20 +306,27 @@ async def create_ticket(
 
 async def update_ticket(
     ticket_id: str,
-    owner_id: str,
+    workspace_id: str,
     payload: TicketUpdateRequest,
+    *,
+    owner_id: str,
 ) -> TicketResponse:
-    await _get_owned_ticket(ticket_id, owner_id)
+    await _get_workspace_ticket(ticket_id, workspace_id)
+    ticket_id = _require_id(ticket_id, "ticket id")
+    workspace_id = _require_id(workspace_id, "workspace id")
 
     updates = payload.model_dump(exclude_unset=True)
+    updates.pop("workspace_id", None)
+    updates.pop("owner_id", None)
     if "assignee_id" in updates:
         updates["assignee_id"] = await team_service.require_assignable_member(
             updates["assignee_id"],
-            owner_id,
+            workspace_id,
+            owner_id=owner_id,
         )
 
     if "customer_id" in updates and updates["customer_id"] is not None:
-        customer = await _get_owned_customer(updates["customer_id"], owner_id)
+        customer = await _get_workspace_customer(updates["customer_id"], workspace_id)
         updates["customer_id"] = str(customer["_id"])
 
     if not updates:
@@ -287,15 +336,14 @@ async def update_ticket(
         )
 
     updates["updated_at"] = utc_now()
+    tenant_filter = _ticket_filter(ticket_id, workspace_id)
 
     try:
         await _tickets().update_one(
-            {"_id": ticket_id, "owner_id": owner_id},
+            tenant_filter,
             {"$set": updates},
         )
-        document = await _tickets().find_one(
-            {"_id": ticket_id, "owner_id": owner_id},
-        )
+        document = await _tickets().find_one(tenant_filter)
     except PyMongoError as exc:
         raise _db_error("update ticket", exc) from exc
 
@@ -305,20 +353,23 @@ async def update_ticket(
             detail="Ticket not found.",
         )
 
-    customers = await _customer_summaries(owner_id, [document["customer_id"]])
+    customers = await _customer_summaries(workspace_id, [document["customer_id"]])
     assignees = await team_service.member_summaries(
-        owner_id,
+        workspace_id,
         [document["assignee_id"]] if document.get("assignee_id") else [],
+        owner_id=owner_id,
     )
     return _to_response(document, customers, assignees)
 
 
-async def delete_ticket(ticket_id: str, owner_id: str) -> None:
-    await _get_owned_ticket(ticket_id, owner_id)
+async def delete_ticket(ticket_id: str, workspace_id: str) -> None:
+    await _get_workspace_ticket(ticket_id, workspace_id)
+    ticket_id = _require_id(ticket_id, "ticket id")
+    workspace_id = _require_id(workspace_id, "workspace id")
 
     try:
         result = await _tickets().delete_one(
-            {"_id": ticket_id, "owner_id": owner_id},
+            _ticket_filter(ticket_id, workspace_id),
         )
     except PyMongoError as exc:
         raise _db_error("delete ticket", exc) from exc

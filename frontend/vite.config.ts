@@ -21,5 +21,6 @@ export default defineConfig({
     include: ["src/**/*.test.{ts,tsx}"],
     restoreMocks: true,
     clearMocks: true,
+    pool: "forks",
   },
 })

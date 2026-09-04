@@ -6,7 +6,9 @@ import { screen } from "@testing-library/react"
 import { AppRouter } from "@/routes"
 import { fetchCurrentUser } from "@/services/auth"
 import { listConversations } from "@/services/conversations"
-import { sampleUser } from "@/test/fixtures"
+import { sampleUser,
+  asPage,
+} from "@/test/fixtures"
 import { deferred, renderWithProviders } from "@/test/test-utils"
 
 vi.mock("@/services/auth", () => ({
@@ -49,7 +51,7 @@ describe("ProtectedRoute", () => {
   beforeEach(() => {
     vi.mocked(fetchCurrentUser).mockReset()
     vi.mocked(listConversations).mockReset()
-    vi.mocked(listConversations).mockResolvedValue([])
+    vi.mocked(listConversations).mockResolvedValue(asPage([]))
     vi.spyOn(console, "error").mockImplementation(() => {})
   })
 

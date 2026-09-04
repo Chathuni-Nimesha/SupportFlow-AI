@@ -10,6 +10,7 @@ export type KnowledgeIngestionStatus =
 export type KnowledgeDocument = {
   id: string
   owner_id: string
+  workspace_id?: string
   title: string
   content: string
   source_type: KnowledgeSourceType

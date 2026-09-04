@@ -4,7 +4,8 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.auth.deps import get_current_user
+from app.auth.deps import get_current_user, get_current_workspace
+from app.core.rate_limit import enforce_ai_rate_limit
 from app.schemas.ai import AiAnswerRequest, AiAnswerResponse, AiAnswerSource
 from app.schemas.auth import UserResponse
 from app.services.gemini_service import (
@@ -17,6 +18,7 @@ from app.services.rag_service import (
     RagValidationError,
     answer_with_rag,
 )
+from app.services.workspace_service import WorkspaceContext
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -25,16 +27,21 @@ router = APIRouter(prefix="/ai", tags=["ai"])
 async def generate_ai_answer(
     payload: AiAnswerRequest,
     current_user: Annotated[UserResponse, Depends(get_current_user)],
+    current_workspace: Annotated[WorkspaceContext, Depends(get_current_workspace)],
 ) -> AiAnswerResponse:
     """
-    Answer a question using owner-scoped published knowledge (RAG).
+    Answer a question using workspace-scoped published knowledge (RAG).
 
     Retrieval + grounded generation. Does not invent knowledge when nothing
     is retrieved.
     """
+    enforce_ai_rate_limit(
+        user_id=current_user.id,
+        workspace_id=current_workspace.id,
+    )
     try:
         result = await answer_with_rag(
-            owner_id=current_user.id,
+            workspace_id=current_workspace.id,
             question=payload.question,
             top_k=payload.top_k,
         )

@@ -22,6 +22,7 @@ type KnowledgeDocumentDetailProps = {
   onIngest: () => void
   isIngesting?: boolean
   ingestError?: string | null
+  canManage?: boolean
 }
 
 export function KnowledgeDocumentDetail({
@@ -31,6 +32,7 @@ export function KnowledgeDocumentDetail({
   onIngest,
   isIngesting = false,
   ingestError = null,
+  canManage = true,
 }: KnowledgeDocumentDetailProps) {
   return (
     <div className="flex h-full flex-col">
@@ -69,19 +71,21 @@ export function KnowledgeDocumentDetail({
                   </p>
                 ) : null}
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="rounded-xl"
-                onClick={onIngest}
-                disabled={isIngesting}
-              >
-                {isIngesting ? (
-                  <Loader2 className="size-3.5 animate-spin" />
-                ) : null}
-                {isIngesting ? "Re-ingesting…" : "Re-ingest"}
-              </Button>
+              {canManage ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="rounded-xl"
+                  onClick={onIngest}
+                  disabled={isIngesting}
+                >
+                  {isIngesting ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : null}
+                  {isIngesting ? "Re-ingesting…" : "Re-ingest"}
+                </Button>
+              ) : null}
             </div>
 
             <KnowledgeAiAvailabilityNotice status={document.status} />
@@ -127,14 +131,16 @@ export function KnowledgeDocumentDetail({
         >
           Close
         </Button>
-        <Button
-          type="button"
-          className="rounded-2xl"
-          onClick={onEdit}
-          disabled={isIngesting}
-        >
-          Edit
-        </Button>
+        {canManage ? (
+          <Button
+            type="button"
+            className="rounded-2xl"
+            onClick={onEdit}
+            disabled={isIngesting}
+          >
+            Edit
+          </Button>
+        ) : null}
       </div>
     </div>
   )

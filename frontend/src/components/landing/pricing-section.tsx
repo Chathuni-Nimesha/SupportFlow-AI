@@ -21,9 +21,10 @@ const plans = [
     price: "Free to try",
     period: "",
     description:
-      "The current product: an authenticated agent workspace with knowledge-grounded AI assistance.",
+      "The current product: an authenticated agent workspace with knowledge-grounded AI assistance, plus customers, tickets, and a team directory.",
     features: [
       "Conversations and messages",
+      "Customers, tickets, and team directory",
       "Knowledge Base CRUD and publishing",
       "Semantic knowledge search",
       "AI-assisted suggested replies",
@@ -40,10 +41,10 @@ const plans = [
     price: "Coming soon",
     period: "",
     description:
-      "Shared inboxes, invites, and roles are not available in this version.",
+      "Email invitations, shared inboxes, and teammate login are not available in this version.",
     features: [
-      "Team member directory",
-      "Invitations and roles",
+      "Team member directory (available now in the workspace)",
+      "Invitations and member login",
       "Shared workspace controls",
     ],
     cta: "Coming soon",

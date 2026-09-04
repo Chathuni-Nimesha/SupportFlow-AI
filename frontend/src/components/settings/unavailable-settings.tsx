@@ -19,7 +19,8 @@ const unavailableItems = [
   },
   {
     label: "Organization settings",
-    message: "There is no organization settings API.",
+    message:
+      "Workspace name is managed above. Additional organization settings are not connected.",
   },
   {
     label: "API keys",

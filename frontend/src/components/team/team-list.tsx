@@ -23,6 +23,7 @@ type TeamListProps = {
   onDelete: (member: TeamMember) => void
   disablingId?: string | null
   deletingId?: string | null
+  canManage?: boolean
 }
 
 export function TeamList({
@@ -37,6 +38,7 @@ export function TeamList({
   onDelete,
   disablingId = null,
   deletingId = null,
+  canManage = true,
 }: TeamListProps) {
   if (isLoading) {
     return (
@@ -148,51 +150,55 @@ export function TeamList({
                 >
                   <Eye className="size-4" />
                 </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="rounded-xl"
-                  aria-label={`Edit ${name}`}
-                  onClick={() => onEdit(member)}
-                  disabled={owner}
-                >
-                  <Pencil className="size-4" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="rounded-xl"
-                  aria-label={
-                    member.status === "DISABLED"
-                      ? `Enable ${name}`
-                      : `Disable ${name}`
-                  }
-                  onClick={() => onDisable(member)}
-                  disabled={owner || busy}
-                >
-                  {disablingId === member.id ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <Ban className="size-4" />
-                  )}
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="rounded-xl text-rose-600 hover:text-rose-700"
-                  aria-label={`Remove ${name}`}
-                  onClick={() => onDelete(member)}
-                  disabled={owner || busy}
-                >
-                  {deletingId === member.id ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <Trash2 className="size-4" />
-                  )}
-                </Button>
+                {canManage ? (
+                  <>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="rounded-xl"
+                      aria-label={`Edit ${name}`}
+                      onClick={() => onEdit(member)}
+                      disabled={owner}
+                    >
+                      <Pencil className="size-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="rounded-xl"
+                      aria-label={
+                        member.status === "DISABLED"
+                          ? `Enable ${name}`
+                          : `Disable ${name}`
+                      }
+                      onClick={() => onDisable(member)}
+                      disabled={owner || busy}
+                    >
+                      {disablingId === member.id ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <Ban className="size-4" />
+                      )}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="rounded-xl text-rose-600 hover:text-rose-700"
+                      aria-label={`Remove ${name}`}
+                      onClick={() => onDelete(member)}
+                      disabled={owner || busy}
+                    >
+                      {deletingId === member.id ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="size-4" />
+                      )}
+                    </Button>
+                  </>
+                ) : null}
               </div>
             </li>
           )

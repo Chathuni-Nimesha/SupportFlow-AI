@@ -64,13 +64,15 @@ async def test_knowledge_search_returns_own_published_chunks(
     hit = body["results"][0]
     assert "refund" in hit["document"].lower()
     assert hit["metadata"]["document_id"] == created.json()["id"]
+    assert hit["metadata"]["workspace_id"] == created.json()["workspace_id"]
+    assert hit["metadata"]["owner_id"] == created.json()["owner_id"]
     assert hit["metadata"]["status"] == "Published"
     assert "distance" in hit
     assert "score" in hit
 
 
 @pytest.mark.asyncio
-async def test_knowledge_search_is_owner_scoped(
+async def test_knowledge_search_is_workspace_scoped(
     client: AsyncClient,
     auth_headers: dict[str, str],
     sample_register_payload: dict,
@@ -205,7 +207,8 @@ async def test_knowledge_crud_still_works_after_search_route(
         headers=auth_headers,
     )
     assert listed.status_code == 200
-    assert len(listed.json()) == 1
+    assert len(listed.json()["items"]) == 1
+    assert listed.json()["total"] == 1
 
     detail = await client.get(
         f"/api/v1/knowledge-documents/{document_id}",
@@ -213,3 +216,48 @@ async def test_knowledge_crud_still_works_after_search_route(
     )
     assert detail.status_code == 200
     assert detail.json()["id"] == document_id
+
+
+@pytest.mark.asyncio
+async def test_knowledge_search_ignores_client_workspace_id(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    sample_register_payload: dict,
+) -> None:
+    reset_chroma_client()
+    created = await client.post(
+        "/api/v1/knowledge-documents",
+        headers=auth_headers,
+        json=SAMPLE_PUBLISHED,
+    )
+    assert created.status_code == 201
+    workspace_a = created.json()["workspace_id"]
+
+    other_payload = {
+        **sample_register_payload,
+        "email": "search-forge-ws@acme.example",
+    }
+    await client.post("/api/v1/auth/register", json=other_payload)
+    other_login = await client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": other_payload["email"],
+            "password": other_payload["password"],
+        },
+    )
+    other_headers = {
+        "Authorization": f"Bearer {other_login.json()['access_token']}",
+    }
+
+    forged = await client.post(
+        "/api/v1/knowledge/search",
+        headers=other_headers,
+        json={
+            "query": "refund policy payment method",
+            "top_k": 5,
+            "workspace_id": workspace_a,
+        },
+    )
+    assert forged.status_code == 200
+    assert forged.json()["count"] == 0
+    assert forged.json()["results"] == []

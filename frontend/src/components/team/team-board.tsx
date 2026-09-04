@@ -5,6 +5,7 @@ import { Plus, Users } from "lucide-react"
 import { TeamDetailPanel } from "@/components/team/team-detail"
 import { TeamForm } from "@/components/team/team-form"
 import { TeamList } from "@/components/team/team-list"
+import { ListPagination } from "@/components/common/list-pagination"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -40,7 +41,10 @@ import {
   type TeamMemberRole,
   type TeamMemberStatus,
 } from "@/types/team"
+import { DEFAULT_PAGE_SIZE } from "@/types/pagination"
 import { getApiErrorMessage } from "@/utils/api-error"
+import { useAuth } from "@/context/auth-provider"
+import { canManageTeam } from "@/lib/workspace-permissions"
 
 type PanelMode = "closed" | "create" | "edit" | "view" | "delete" | "disable"
 
@@ -50,11 +54,14 @@ const selectClassName =
   "h-11 w-full rounded-2xl border border-border/80 bg-background px-3 text-sm shadow-soft focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
 
 export function TeamBoard() {
+  const { user, isLoading: isAuthLoading } = useAuth()
+  const canManage = !isAuthLoading && canManageTeam(user)
   const queryClient = useQueryClient()
   const [search, setSearch] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [roleFilter, setRoleFilter] = useState<TeamMemberRole | "">("")
   const [statusFilter, setStatusFilter] = useState<TeamMemberStatus | "">("")
+  const [page, setPage] = useState(1)
   const [panelMode, setPanelMode] = useState<PanelMode>("closed")
   const [activeMember, setActiveMember] = useState<TeamMember | null>(null)
   const [formValues, setFormValues] = useState<TeamMemberFormValues>(
@@ -65,14 +72,21 @@ export function TeamBoard() {
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
       setDebouncedSearch(search.trim())
+      setPage(1)
     }, 300)
     return () => window.clearTimeout(timeoutId)
   }, [search])
+
+  useEffect(() => {
+    setPage(1)
+  }, [roleFilter, statusFilter])
 
   const listParams = {
     query: debouncedSearch || undefined,
     role: roleFilter || undefined,
     status: statusFilter || undefined,
+    page,
+    pageSize: DEFAULT_PAGE_SIZE,
   }
 
   const listQuery = useQuery({
@@ -87,7 +101,7 @@ export function TeamBoard() {
     enabled: panelMode === "view" && Boolean(activeMember?.id),
   })
 
-  const members = listQuery.data ?? []
+  const members = listQuery.data?.items ?? []
   const listError = listQuery.isError
     ? getApiErrorMessage(listQuery.error, "Unable to load team members.")
     : null
@@ -267,10 +281,12 @@ export function TeamBoard() {
             Directory members cannot sign in until invitations are added.
           </p>
         </div>
-        <Button type="button" className="rounded-2xl" onClick={openCreate}>
-          <Plus className="size-4" />
-          New member
-        </Button>
+        {canManage ? (
+          <Button type="button" className="rounded-2xl" onClick={openCreate}>
+            <Plus className="size-4" />
+            New member
+          </Button>
+        ) : null}
       </div>
 
       <div className="space-y-4 rounded-2xl border border-border/80 bg-card p-4 shadow-soft">
@@ -342,8 +358,17 @@ export function TeamBoard() {
         onEdit={openEdit}
         onDisable={openDisable}
         onDelete={openDelete}
+        canManage={canManage}
         disablingId={disablingId}
         deletingId={deletingId}
+      />
+      <ListPagination
+        page={listQuery.data?.page ?? page}
+        pageSize={listQuery.data?.pageSize ?? DEFAULT_PAGE_SIZE}
+        total={listQuery.data?.total ?? 0}
+        hasNext={listQuery.data?.hasNext ?? false}
+        onPageChange={setPage}
+        itemLabel="team members"
       />
 
       <Sheet
@@ -413,6 +438,7 @@ export function TeamBoard() {
                   openDisable(detailQuery.data ?? activeMember)
                 }
                 onDelete={() => openDelete(detailQuery.data ?? activeMember)}
+                canManage={canManage}
               />
             )
           ) : null}

@@ -24,6 +24,7 @@ type KnowledgeDocumentListProps = {
   onEdit: (document: KnowledgeDocument) => void
   onDelete: (document: KnowledgeDocument) => void
   deletingId?: string | null
+  canManage?: boolean
 }
 
 export function KnowledgeDocumentList({
@@ -35,6 +36,7 @@ export function KnowledgeDocumentList({
   onEdit,
   onDelete,
   deletingId = null,
+  canManage = true,
 }: KnowledgeDocumentListProps) {
   if (isLoading) {
     return (
@@ -157,32 +159,36 @@ export function KnowledgeDocumentList({
                   <Eye className="size-3.5" />
                   View
                 </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="rounded-xl"
-                  onClick={() => onEdit(document)}
-                  disabled={isDeleting}
-                >
-                  <Pencil className="size-3.5" />
-                  Edit
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="rounded-xl border-rose-200 text-rose-700 hover:bg-rose-50 dark:border-rose-500/30 dark:text-rose-300 dark:hover:bg-rose-500/10"
-                  onClick={() => onDelete(document)}
-                  disabled={isDeleting}
-                >
-                  {isDeleting ? (
-                    <Loader2 className="size-3.5 animate-spin" />
-                  ) : (
-                    <Trash2 className="size-3.5" />
-                  )}
-                  Delete
-                </Button>
+                {canManage ? (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="rounded-xl"
+                      onClick={() => onEdit(document)}
+                      disabled={isDeleting}
+                    >
+                      <Pencil className="size-3.5" />
+                      Edit
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="rounded-xl border-rose-200 text-rose-700 hover:bg-rose-50 dark:border-rose-500/30 dark:text-rose-300 dark:hover:bg-rose-500/10"
+                      onClick={() => onDelete(document)}
+                      disabled={isDeleting}
+                    >
+                      {isDeleting ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="size-3.5" />
+                      )}
+                      Delete
+                    </Button>
+                  </>
+                ) : null}
               </div>
             </div>
           </article>

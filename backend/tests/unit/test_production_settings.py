@@ -69,6 +69,7 @@ def test_development_create_app_exposes_docs() -> None:
         assert "/docs" in paths
         assert "/redoc" in paths
         assert "/openapi.json" in paths
+        assert "/health" in paths
     finally:
         main_module.get_settings = original  # type: ignore[method-assign]
         get_settings.cache_clear()
@@ -148,6 +149,7 @@ def test_production_forces_debug_off_and_hides_docs() -> None:
         assert "/docs" not in paths
         assert "/redoc" not in paths
         assert "/openapi.json" not in paths
+        assert "/health" in paths
     finally:
         main_module.get_settings = original  # type: ignore[method-assign]
         get_settings.cache_clear()

@@ -3,6 +3,9 @@
 import pytest
 from httpx import AsyncClient
 
+from app.database import mongodb as mongodb_module
+from app.models.ticket import build_ticket_document
+
 
 SAMPLE_CUSTOMER = {
     "first_name": "Elena",
@@ -112,7 +115,10 @@ async def test_create_ticket(
     assert body["customer"]["email"] == "elena@acme.example"
     assert body["customer"]["first_name"] == "Elena"
     assert "id" in body
-    assert "owner_id" in body
+    me = await _current_user(client, auth_headers)
+    assert body["owner_id"] == me["id"]
+    assert body["workspace_id"] == me["default_workspace_id"]
+    assert body["workspace_id"] != me["id"]
     assert "created_at" in body
     assert "updated_at" in body
     assert "password" not in body
@@ -254,7 +260,9 @@ async def test_list_search_and_filter_tickets(
 
     listed = await client.get("/api/v1/tickets", headers=auth_headers)
     assert listed.status_code == 200
-    assert len(listed.json()) == 2
+    assert len(listed.json()["items"]) == 2
+    assert listed.json()["total"] == 2
+    assert listed.json()["has_next"] is False
 
     searched = await client.get(
         "/api/v1/tickets",
@@ -262,8 +270,8 @@ async def test_list_search_and_filter_tickets(
         params={"q": "duplicate charge"},
     )
     assert searched.status_code == 200
-    assert len(searched.json()) == 1
-    assert searched.json()[0]["id"] == refund["id"]
+    assert len(searched.json()["items"]) == 1
+    assert searched.json()["items"][0]["id"] == refund["id"]
 
     by_status = await client.get(
         "/api/v1/tickets",
@@ -271,7 +279,7 @@ async def test_list_search_and_filter_tickets(
         params={"status": "IN_PROGRESS"},
     )
     assert by_status.status_code == 200
-    assert [item["id"] for item in by_status.json()] == [shipping["id"]]
+    assert [item["id"] for item in by_status.json()["items"]] == [shipping["id"]]
 
     by_priority = await client.get(
         "/api/v1/tickets",
@@ -279,7 +287,7 @@ async def test_list_search_and_filter_tickets(
         params={"priority": "HIGH"},
     )
     assert by_priority.status_code == 200
-    assert [item["id"] for item in by_priority.json()] == [refund["id"]]
+    assert [item["id"] for item in by_priority.json()["items"]] == [refund["id"]]
 
     by_assignee = await client.get(
         "/api/v1/tickets",
@@ -287,7 +295,7 @@ async def test_list_search_and_filter_tickets(
         params={"assignee_id": me["id"]},
     )
     assert by_assignee.status_code == 200
-    assert [item["id"] for item in by_assignee.json()] == [shipping["id"]]
+    assert [item["id"] for item in by_assignee.json()["items"]] == [shipping["id"]]
 
     unassigned = await client.get(
         "/api/v1/tickets",
@@ -295,7 +303,7 @@ async def test_list_search_and_filter_tickets(
         params={"unassigned": True},
     )
     assert unassigned.status_code == 200
-    assert [item["id"] for item in unassigned.json()] == [refund["id"]]
+    assert [item["id"] for item in unassigned.json()["items"]] == [refund["id"]]
 
     by_customer = await client.get(
         "/api/v1/tickets",
@@ -303,7 +311,7 @@ async def test_list_search_and_filter_tickets(
         params={"customer_id": customer["id"]},
     )
     assert by_customer.status_code == 200
-    assert [item["id"] for item in by_customer.json()] == [refund["id"]]
+    assert [item["id"] for item in by_customer.json()["items"]] == [refund["id"]]
 
 
 @pytest.mark.asyncio
@@ -395,7 +403,7 @@ async def test_get_ticket_not_found(
 
 
 @pytest.mark.asyncio
-async def test_tickets_are_scoped_to_owner(
+async def test_tickets_are_scoped_to_workspace(
     client: AsyncClient,
     auth_headers: dict[str, str],
     sample_register_payload: dict,
@@ -422,7 +430,8 @@ async def test_tickets_are_scoped_to_owner(
 
     listed = await client.get("/api/v1/tickets", headers=other_headers)
     assert listed.status_code == 200
-    assert listed.json() == []
+    assert listed.json()["items"] == []
+    assert listed.json()["total"] == 0
 
     detail = await client.get(
         f"/api/v1/tickets/{ticket_id}",
@@ -450,6 +459,15 @@ async def test_tickets_are_scoped_to_owner(
     )
     assert stolen_customer.status_code == 404
     assert stolen_customer.json()["detail"] == "Customer not found."
+
+    still_there = await client.get(
+        f"/api/v1/tickets/{ticket_id}",
+        headers=auth_headers,
+    )
+    assert still_there.status_code == 200
+    owner = await _current_user(client, auth_headers)
+    assert still_there.json()["workspace_id"] == owner["default_workspace_id"]
+    assert still_there.json()["owner_id"] == owner["id"]
 
 
 @pytest.mark.asyncio
@@ -615,3 +633,126 @@ async def test_delete_team_member_unassigns_tickets(
     assert detail.status_code == 200
     assert detail.json()["assignee_id"] is None
     assert detail.json()["assignee"] is None
+
+
+@pytest.mark.asyncio
+async def test_create_ticket_ignores_client_workspace_id(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+) -> None:
+    customer = await _create_customer(client, auth_headers)
+    me = await _current_user(client, auth_headers)
+    response = await client.post(
+        "/api/v1/tickets",
+        headers=auth_headers,
+        json={
+            **SAMPLE_TICKET,
+            "customer_id": customer["id"],
+            "workspace_id": me["id"],
+        },
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["workspace_id"] == me["default_workspace_id"]
+    assert body["workspace_id"] != me["id"]
+    assert body["owner_id"] == me["id"]
+
+
+@pytest.mark.asyncio
+async def test_update_ticket_can_reattach_same_workspace_customer(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+) -> None:
+    customer = await _create_customer(client, auth_headers)
+    other = await _create_customer(
+        client,
+        auth_headers,
+        email="noah@orbit.example",
+        first_name="Noah",
+        last_name="Diaz",
+    )
+    created = await _create_ticket(client, auth_headers, customer["id"])
+    me = await _current_user(client, auth_headers)
+
+    updated = await client.patch(
+        f"/api/v1/tickets/{created['id']}",
+        headers=auth_headers,
+        json={"customer_id": other["id"], "workspace_id": me["id"]},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["customer_id"] == other["id"]
+    assert updated.json()["customer"]["email"] == "noah@orbit.example"
+    assert updated.json()["workspace_id"] == me["default_workspace_id"]
+    assert updated.json()["owner_id"] == me["id"]
+
+
+@pytest.mark.asyncio
+async def test_update_ticket_rejects_foreign_workspace_customer(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    sample_register_payload: dict,
+) -> None:
+    customer = await _create_customer(client, auth_headers)
+    created = await _create_ticket(client, auth_headers, customer["id"])
+
+    other_payload = {
+        **sample_register_payload,
+        "email": "other-ticket-customer@acme.example",
+    }
+    await client.post("/api/v1/auth/register", json=other_payload)
+    other_login = await client.post(
+        "/api/v1/auth/login",
+        json={
+            "email": other_payload["email"],
+            "password": other_payload["password"],
+        },
+    )
+    other_headers = {
+        "Authorization": f"Bearer {other_login.json()['access_token']}",
+    }
+    foreign_customer = await _create_customer(
+        client,
+        other_headers,
+        email="foreign-customer@acme.example",
+    )
+
+    response = await client.patch(
+        f"/api/v1/tickets/{created['id']}",
+        headers=auth_headers,
+        json={"customer_id": foreign_customer["id"]},
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Customer not found."
+
+
+@pytest.mark.asyncio
+async def test_backfilled_ticket_is_accessible_in_workspace(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+) -> None:
+    customer = await _create_customer(client, auth_headers)
+    me = await _current_user(client, auth_headers)
+    document = build_ticket_document(
+        owner_id=me["id"],
+        workspace_id=me["default_workspace_id"],
+        customer_id=customer["id"],
+        title="Backfilled outage",
+        description="Seeded before workspace cutover.",
+    )
+    db = mongodb_module.get_database()
+    await db.tickets.insert_one(document)
+
+    listed = await client.get("/api/v1/tickets", headers=auth_headers)
+    assert listed.status_code == 200
+    ids = [item["id"] for item in listed.json()["items"]]
+    assert document["_id"] in ids
+
+    detail = await client.get(
+        f"/api/v1/tickets/{document['_id']}",
+        headers=auth_headers,
+    )
+    assert detail.status_code == 200
+    assert detail.json()["workspace_id"] == me["default_workspace_id"]
+    assert detail.json()["owner_id"] == me["id"]
+    assert detail.json()["customer_id"] == customer["id"]
+

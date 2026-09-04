@@ -13,31 +13,38 @@ import { Button } from "@/components/ui/button"
 import { listConversations } from "@/services/conversations"
 import type { ConversationApi } from "@/types/conversations"
 import { getApiErrorMessage } from "@/utils/api-error"
+import { useAuth } from "@/context/auth-provider"
 
 export function AnalyticsBoard() {
+  const { currentWorkspace } = useAuth()
+  const workspaceId = currentWorkspace?.id ?? null
   const [conversations, setConversations] = useState<ConversationApi[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [truncated, setTruncated] = useState(false)
 
   const loadConversations = useCallback(async () => {
     setIsLoading(true)
     setError(null)
     try {
-      const data = await listConversations()
-      setConversations(data)
+      const page = await listConversations({ page: 1, pageSize: 100 })
+      setConversations(page.items)
+      setTruncated(page.hasNext)
     } catch (loadError) {
       setConversations([])
+      setTruncated(false)
       setError(
         getApiErrorMessage(loadError, "Unable to load conversation analytics."),
       )
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [workspaceId])
 
   useEffect(() => {
+    setConversations([])
     void loadConversations()
-  }, [loadConversations])
+  }, [loadConversations, workspaceId])
 
   const statusCounts = useMemo(
     () => countByStatus(conversations),
@@ -63,6 +70,9 @@ export function AnalyticsBoard() {
         <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
           Conversation metrics from your workspace. These counts come from
           existing conversations — not tickets or estimated rates.
+          {truncated
+            ? " Status and channel breakdowns use the 100 most recently updated conversations."
+            : ""}
         </p>
       </motion.div>
 

@@ -4,6 +4,8 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
+from app.models.workspace import apply_optional_workspace_id
+
 
 CONVERSATIONS_COLLECTION = "conversations"
 
@@ -25,10 +27,11 @@ def build_conversation_document(
     status: str = "Open",
     assigned_agent_id: str | None = None,
     unread_count: int = 0,
+    workspace_id: str | None = None,
 ) -> dict[str, Any]:
     """Create a new conversation document ready for insertion."""
     now = utc_now()
-    return {
+    document = {
         "_id": str(uuid4()),
         "owner_id": owner_id,
         "customer_name": customer_name.strip(),
@@ -42,11 +45,12 @@ def build_conversation_document(
         "created_at": now,
         "updated_at": now,
     }
+    return apply_optional_workspace_id(document, workspace_id)
 
 
 def serialize_conversation(document: dict[str, Any]) -> dict[str, Any]:
     """Map a MongoDB conversation document to a public payload."""
-    return {
+    payload = {
         "id": str(document["_id"]),
         "owner_id": document["owner_id"],
         "customer_name": document["customer_name"],
@@ -60,3 +64,7 @@ def serialize_conversation(document: dict[str, Any]) -> dict[str, Any]:
         "created_at": document["created_at"],
         "updated_at": document["updated_at"],
     }
+    workspace_id = document.get("workspace_id")
+    if workspace_id:
+        payload["workspace_id"] = str(workspace_id)
+    return payload

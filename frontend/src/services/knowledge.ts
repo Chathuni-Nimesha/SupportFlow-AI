@@ -1,4 +1,11 @@
 import { api } from "@/services/api"
+import {
+  DEFAULT_PAGE_SIZE,
+  mapPaginated,
+  type ListPaginationParams,
+  type PaginatedApi,
+  type PaginatedList,
+} from "@/types/pagination"
 import type {
   KnowledgeDocument,
   KnowledgeDocumentCreatePayload,
@@ -8,9 +15,19 @@ import type {
   KnowledgeSearchResponse,
 } from "@/types/knowledge"
 
-export async function listKnowledgeDocuments(): Promise<KnowledgeDocument[]> {
-  const { data } = await api.get<KnowledgeDocument[]>("/knowledge-documents")
-  return data
+export async function listKnowledgeDocuments(
+  params: ListPaginationParams = {},
+): Promise<PaginatedList<KnowledgeDocument>> {
+  const { data } = await api.get<PaginatedApi<KnowledgeDocument>>(
+    "/knowledge-documents",
+    {
+      params: {
+        page: params.page ?? 1,
+        page_size: params.pageSize ?? DEFAULT_PAGE_SIZE,
+      },
+    },
+  )
+  return mapPaginated(data)
 }
 
 export async function getKnowledgeDocument(

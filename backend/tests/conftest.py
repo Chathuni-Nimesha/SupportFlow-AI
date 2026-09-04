@@ -38,10 +38,24 @@ async def client() -> AsyncIterator[AsyncClient]:
         [("owner_id", 1), ("email", 1)],
         unique=True,
     )
+    await mock_db.customers.create_index(
+        [("workspace_id", 1), ("email", 1)],
+        unique=True,
+    )
     await mock_db.team_members.create_index(
         [("owner_id", 1), ("email", 1)],
         unique=True,
     )
+    await mock_db.team_members.create_index(
+        [("workspace_id", 1), ("email", 1)],
+        unique=True,
+    )
+    await mock_db.team_members.create_index(
+        [("workspace_id", 1), ("user_id", 1)],
+        unique=True,
+        partialFilterExpression={"user_id": {"$type": "string"}},
+    )
+    await mock_db.workspaces.create_index("owner_user_id", unique=True)
 
     mongodb_module._client = mock_client
     mongodb_module._database = mock_db

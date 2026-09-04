@@ -19,6 +19,7 @@ export type MessageSender = "customer" | "ai" | "agent"
 export type ConversationApi = {
   id: string
   owner_id: string
+  workspace_id?: string
   customer_name: string
   customer_email: string
   subject: string

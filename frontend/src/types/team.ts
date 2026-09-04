@@ -9,6 +9,7 @@ export type AssignableTeamRole = (typeof ASSIGNABLE_TEAM_ROLES)[number]
 export type TeamMember = {
   id: string
   owner_id: string
+  workspace_id?: string
   user_id: string | null
   first_name: string
   last_name: string
@@ -39,6 +40,8 @@ export type TeamMemberListParams = {
   query?: string
   role?: TeamMemberRole
   status?: TeamMemberStatus
+  page?: number
+  pageSize?: number
 }
 
 export type TeamMemberFormValues = {

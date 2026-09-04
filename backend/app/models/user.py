@@ -32,6 +32,7 @@ def build_user_document(
         "is_active": True,
         "created_at": now,
         "updated_at": now,
+        "default_workspace_id": None,
     }
 
 
@@ -45,4 +46,5 @@ def serialize_user(document: dict[str, Any]) -> dict[str, Any]:
         "email": document["email"],
         "is_active": bool(document.get("is_active", True)),
         "created_at": document["created_at"],
+        "default_workspace_id": document.get("default_workspace_id"),
     }

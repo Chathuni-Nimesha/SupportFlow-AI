@@ -3,7 +3,9 @@ import { screen, waitFor } from "@testing-library/react"
 
 import { AiAssistantBoard } from "@/components/ai-assistant/ai-assistant-board"
 import { generateAiAnswer } from "@/services/ai"
+import { fetchCurrentUser } from "@/services/auth"
 import {
+  makeAgentUser,
   sampleGroundedAnswer,
   sampleNoKnowledgeAnswer,
 } from "@/test/fixtures"
@@ -13,6 +15,13 @@ import userEvent from "@testing-library/user-event"
 vi.mock("@/services/ai", () => ({
   generateAiAnswer: vi.fn(),
   mapAiAnswer: vi.fn(),
+}))
+
+vi.mock("@/services/auth", () => ({
+  fetchCurrentUser: vi.fn(),
+  loginUser: vi.fn(),
+  logoutUser: vi.fn(),
+  registerUser: vi.fn(),
 }))
 
 describe("AiAssistantBoard", () => {
@@ -117,5 +126,18 @@ describe("AiAssistantBoard", () => {
       await screen.findByText(sampleGroundedAnswer.answer),
     ).toBeInTheDocument()
     expect(generateAiAnswer).toHaveBeenCalledTimes(2)
+  })
+
+  it("keeps the AI assistant available for AGENT", async () => {
+    localStorage.setItem("access_token", "test-token")
+    vi.mocked(fetchCurrentUser).mockResolvedValue(makeAgentUser())
+
+    renderWithProviders(<AiAssistantBoard />)
+
+    expect(
+      await screen.findByRole("heading", { name: "AI Assistant" }),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText("Question")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Ask" })).toBeInTheDocument()
   })
 })

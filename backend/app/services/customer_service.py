@@ -9,6 +9,7 @@ from fastapi import HTTPException, status
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
 from app.core.logging import get_logger
+from app.core.pagination import paginate_find, paginated_payload
 from app.database.mongodb import get_database
 from app.models.conversation import (
     CONVERSATIONS_COLLECTION,
@@ -83,16 +84,40 @@ def _name_email_company_search(cleaned: str) -> dict[str, Any]:
     return {"$and": clauses}
 
 
-async def _get_owned_customer(customer_id: str, owner_id: str) -> dict[str, Any]:
-    if not customer_id or not customer_id.strip():
+def _require_customer_id(customer_id: str) -> str:
+    cleaned = (customer_id or "").strip()
+    if not cleaned:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid customer id.",
         )
+    return cleaned
+
+
+def _require_workspace_id(workspace_id: str) -> str:
+    cleaned = (workspace_id or "").strip()
+    if not cleaned:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid workspace id.",
+        )
+    return cleaned
+
+
+def _customer_filter(customer_id: str, workspace_id: str) -> dict[str, str]:
+    return {"_id": customer_id, "workspace_id": workspace_id}
+
+
+async def _get_workspace_customer(
+    customer_id: str,
+    workspace_id: str,
+) -> dict[str, Any]:
+    customer_id = _require_customer_id(customer_id)
+    workspace_id = _require_workspace_id(workspace_id)
 
     try:
         document = await _customers().find_one(
-            {"_id": customer_id, "owner_id": owner_id},
+            _customer_filter(customer_id, workspace_id),
         )
     except PyMongoError as exc:
         raise _db_error("fetch customer", exc) from exc
@@ -106,13 +131,20 @@ async def _get_owned_customer(customer_id: str, owner_id: str) -> dict[str, Any]
 
 
 async def _related_conversations(
-    owner_id: str,
+    workspace_id: str,
     email: str,
 ) -> list[ConversationResponse]:
+    workspace_id = _require_workspace_id(workspace_id)
+    normalized_email = str(email or "").strip().lower()
     try:
         cursor = (
             _conversations()
-            .find({"owner_id": owner_id, "customer_email": email})
+            .find(
+                {
+                    "workspace_id": workspace_id,
+                    "customer_email": normalized_email,
+                },
+            )
             .sort("updated_at", -1)
         )
         documents = await cursor.to_list(length=100)
@@ -126,44 +158,65 @@ async def _related_conversations(
 
 
 async def list_customers(
-    owner_id: str,
+    workspace_id: str,
     query: str | None = None,
-) -> list[CustomerResponse]:
-    filters: dict[str, Any] = {"owner_id": owner_id}
+    *,
+    page: int = 1,
+    page_size: int = 20,
+) -> dict[str, Any]:
+    workspace_id = _require_workspace_id(workspace_id)
+    filters: dict[str, Any] = {"workspace_id": workspace_id}
     cleaned = (query or "").strip()
     if cleaned:
         filters.update(_name_email_company_search(cleaned))
 
     try:
-        cursor = _customers().find(filters).sort("updated_at", -1)
-        documents = await cursor.to_list(length=500)
+        documents, total = await paginate_find(
+            _customers(),
+            filters,
+            page=page,
+            page_size=page_size,
+        )
     except PyMongoError as exc:
         raise _db_error("list customers", exc) from exc
 
-    return [
+    items = [
         CustomerResponse.model_validate(serialize_customer(doc))
         for doc in documents
     ]
+    return paginated_payload(
+        items,
+        page=page,
+        page_size=page_size,
+        total=total,
+    )
 
 
 async def get_customer(
     customer_id: str,
-    owner_id: str,
+    workspace_id: str,
 ) -> CustomerDetailResponse:
-    document = await _get_owned_customer(customer_id, owner_id)
+    document = await _get_workspace_customer(customer_id, workspace_id)
     payload = serialize_customer(document)
-    conversations = await _related_conversations(owner_id, payload["email"])
+    conversations = await _related_conversations(
+        workspace_id,
+        payload["email"],
+    )
     return CustomerDetailResponse.model_validate(
         {**payload, "conversations": conversations},
     )
 
 
 async def create_customer(
+    *,
+    workspace_id: str,
     owner_id: str,
     payload: CustomerCreateRequest,
 ) -> CustomerResponse:
+    workspace_id = _require_workspace_id(workspace_id)
     document = build_customer_document(
         owner_id=owner_id,
+        workspace_id=workspace_id,
         first_name=payload.first_name,
         last_name=payload.last_name,
         email=str(payload.email),
@@ -187,12 +240,16 @@ async def create_customer(
 
 async def update_customer(
     customer_id: str,
-    owner_id: str,
+    workspace_id: str,
     payload: CustomerUpdateRequest,
 ) -> CustomerResponse:
-    await _get_owned_customer(customer_id, owner_id)
+    await _get_workspace_customer(customer_id, workspace_id)
+    customer_id = _require_customer_id(customer_id)
+    workspace_id = _require_workspace_id(workspace_id)
 
     updates = payload.model_dump(exclude_unset=True)
+    updates.pop("workspace_id", None)
+    updates.pop("owner_id", None)
     if "email" in updates and updates["email"] is not None:
         updates["email"] = str(updates["email"]).strip().lower()
     if "phone" in updates and updates["phone"] is not None:
@@ -209,15 +266,14 @@ async def update_customer(
         )
 
     updates["updated_at"] = utc_now()
+    tenant_filter = _customer_filter(customer_id, workspace_id)
 
     try:
         await _customers().update_one(
-            {"_id": customer_id, "owner_id": owner_id},
+            tenant_filter,
             {"$set": updates},
         )
-        document = await _customers().find_one(
-            {"_id": customer_id, "owner_id": owner_id},
-        )
+        document = await _customers().find_one(tenant_filter)
     except DuplicateKeyError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -234,12 +290,14 @@ async def update_customer(
     return CustomerResponse.model_validate(serialize_customer(document))
 
 
-async def delete_customer(customer_id: str, owner_id: str) -> None:
-    await _get_owned_customer(customer_id, owner_id)
+async def delete_customer(customer_id: str, workspace_id: str) -> None:
+    await _get_workspace_customer(customer_id, workspace_id)
+    customer_id = _require_customer_id(customer_id)
+    workspace_id = _require_workspace_id(workspace_id)
 
     try:
         result = await _customers().delete_one(
-            {"_id": customer_id, "owner_id": owner_id},
+            _customer_filter(customer_id, workspace_id),
         )
     except PyMongoError as exc:
         raise _db_error("delete customer", exc) from exc

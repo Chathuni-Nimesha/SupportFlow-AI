@@ -4,7 +4,9 @@ import { screen, waitFor } from "@testing-library/react"
 
 import { AnalyticsBoard } from "@/components/analytics/analytics-board"
 import { listConversations } from "@/services/conversations"
-import { makeConversationApi } from "@/test/fixtures"
+import { makeConversationApi,
+  asPage,
+} from "@/test/fixtures"
 import { deferred, renderWithProviders } from "@/test/test-utils"
 
 vi.mock("@/services/conversations", () => ({
@@ -13,7 +15,7 @@ vi.mock("@/services/conversations", () => ({
 
 describe("AnalyticsBoard", () => {
   it("shows a loading state", async () => {
-    const pending = deferred<ReturnType<typeof makeConversationApi>[]>()
+    const pending = deferred<ReturnType<typeof asPage<ReturnType<typeof makeConversationApi>>>>()
     vi.mocked(listConversations).mockReturnValue(pending.promise)
 
     renderWithProviders(<AnalyticsBoard />)
@@ -21,7 +23,7 @@ describe("AnalyticsBoard", () => {
     expect(
       await screen.findByText("Loading conversation analytics…"),
     ).toBeInTheDocument()
-    pending.resolve([])
+    pending.resolve(asPage([]))
     await waitFor(() => {
       expect(
         screen.queryByText("Loading conversation analytics…"),
@@ -30,7 +32,7 @@ describe("AnalyticsBoard", () => {
   })
 
   it("shows an empty state and unavailable analytics", async () => {
-    vi.mocked(listConversations).mockResolvedValue([])
+    vi.mocked(listConversations).mockResolvedValue(asPage([]))
 
     renderWithProviders(<AnalyticsBoard />)
 
@@ -42,11 +44,11 @@ describe("AnalyticsBoard", () => {
   })
 
   it("displays status counts and channel breakdown from API data", async () => {
-    vi.mocked(listConversations).mockResolvedValue([
+    vi.mocked(listConversations).mockResolvedValue(asPage([
       makeConversationApi({ id: "1", status: "Open", channel: "Email" }),
       makeConversationApi({ id: "2", status: "Waiting", channel: "Chat" }),
       makeConversationApi({ id: "3", status: "Open", channel: "Email" }),
-    ])
+    ]))
 
     renderWithProviders(<AnalyticsBoard />)
 
@@ -65,7 +67,7 @@ describe("AnalyticsBoard", () => {
     const user = userEvent.setup()
     vi.mocked(listConversations)
       .mockRejectedValueOnce(new Error("Analytics unavailable"))
-      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce(asPage([]))
 
     renderWithProviders(<AnalyticsBoard />)
 

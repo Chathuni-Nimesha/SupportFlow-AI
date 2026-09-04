@@ -15,7 +15,6 @@ from app.database.mongodb import get_database
 from app.models.user import (
     USERS_COLLECTION,
     build_user_document,
-    serialize_user,
 )
 from app.schemas.auth import (
     AuthTokenResponse,
@@ -23,6 +22,7 @@ from app.schemas.auth import (
     UserRegisterRequest,
     UserResponse,
 )
+from app.services import workspace_service
 
 logger = get_logger(__name__)
 
@@ -79,7 +79,20 @@ async def register_user(payload: UserRegisterRequest) -> UserResponse:
             detail="Database unavailable. Please try again later.",
         ) from exc
 
-    return UserResponse.model_validate(serialize_user(document))
+    try:
+        await workspace_service.provision_personal_workspace(document)
+    except HTTPException:
+        await workspace_service.compensate_failed_registration(str(document["_id"]))
+        raise
+    except Exception:
+        logger.exception("Failed to provision workspace during registration")
+        await workspace_service.compensate_failed_registration(str(document["_id"]))
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database unavailable. Please try again later.",
+        )
+
+    return await workspace_service.build_user_response(document)
 
 
 async def authenticate_user(payload: UserLoginRequest) -> AuthTokenResponse:
@@ -112,7 +125,7 @@ async def authenticate_user(payload: UserLoginRequest) -> AuthTokenResponse:
         )
 
     token = create_access_token(subject=str(document["_id"]))
-    user = UserResponse.model_validate(serialize_user(document))
+    user = await workspace_service.build_user_response(document)
     return AuthTokenResponse(access_token=token, user=user)
 
 

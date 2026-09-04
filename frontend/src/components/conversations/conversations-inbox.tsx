@@ -43,6 +43,7 @@ import {
 } from "@/components/ui/sheet"
 import { getApiErrorMessage } from "@/utils/api-error"
 import { cn } from "@/lib/utils"
+import { useAuth } from "@/context/auth-provider"
 
 function filterConversations(
   items: Conversation[],
@@ -85,6 +86,8 @@ function buildFilterCounts(
 }
 
 export function ConversationsInbox() {
+  const { currentWorkspace } = useAuth()
+  const workspaceId = currentWorkspace?.id ?? null
   const [filter, setFilter] = useState<ConversationFilter>("inbox")
   const [search, setSearch] = useState("")
   const [items, setItems] = useState<Conversation[]>([])
@@ -125,8 +128,8 @@ export function ConversationsInbox() {
     setListLoading(true)
     setListError(null)
     try {
-      const data = await listConversations()
-      const mapped = data.map((item) => mapConversationFromApi(item))
+      const page = await listConversations({ page: 1, pageSize: 100 })
+      const mapped = page.items.map((item) => mapConversationFromApi(item))
       setItems(mapped)
       setActiveId((current) => {
         if (current && mapped.some((item) => item.id === current)) {
@@ -143,11 +146,13 @@ export function ConversationsInbox() {
     } finally {
       setListLoading(false)
     }
-  }, [])
+  }, [workspaceId])
 
   useEffect(() => {
+    setItems([])
+    setActiveId(null)
     void loadConversations()
-  }, [loadConversations])
+  }, [loadConversations, workspaceId])
 
   const loadConversationDetail = useCallback(async (conversationId: string) => {
     setMessagesLoading(true)

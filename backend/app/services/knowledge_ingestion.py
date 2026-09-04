@@ -52,23 +52,20 @@ def build_chunk_id(document_id: str, chunk_index: int) -> str:
     return f"{document_id}::chunk::{chunk_index}"
 
 
-def _delete_document_chunks_sync(document_id: str, owner_id: str) -> int:
+def _delete_document_chunks_sync(document_id: str) -> int:
+    """Remove every chunk for a document, including legacy owner-only metadata."""
     collection = get_knowledge_collection()
-    # Chroma where filters are AND-combined.
-    collection.delete(
-        where={
-            "$and": [
-                {"document_id": document_id},
-                {"owner_id": owner_id},
-            ],
-        },
-    )
+    collection.delete(where={"document_id": document_id})
     return 0
 
 
 def _upsert_document_chunks_sync(document: dict[str, Any]) -> int:
     document_id = str(document["_id"])
     owner_id = str(document["owner_id"])
+    workspace_id = str(document.get("workspace_id") or "").strip()
+    if not workspace_id:
+        raise ValueError("workspace_id is required to index knowledge chunks.")
+
     title = str(document.get("title") or "")
     content = str(document.get("content") or "")
     status = str(document.get("status") or "Draft")
@@ -79,15 +76,8 @@ def _upsert_document_chunks_sync(document: dict[str, Any]) -> int:
     chunks = chunk_text(f"{title}\n\n{content}")
     collection = get_knowledge_collection()
 
-    # Replace previous vectors for this document before upserting.
-    collection.delete(
-        where={
-            "$and": [
-                {"document_id": document_id},
-                {"owner_id": owner_id},
-            ],
-        },
-    )
+    # Replace previous vectors for this document, including pre-tenancy chunks.
+    collection.delete(where={"document_id": document_id})
 
     if not chunks:
         return 0
@@ -97,6 +87,7 @@ def _upsert_document_chunks_sync(document: dict[str, Any]) -> int:
         {
             "document_id": document_id,
             "owner_id": owner_id,
+            "workspace_id": workspace_id,
             "title": title[:300],
             "status": status,
             "source_type": source_type,
@@ -116,9 +107,9 @@ def _upsert_document_chunks_sync(document: dict[str, Any]) -> int:
     return len(chunks)
 
 
-async def remove_document_embeddings(document_id: str, owner_id: str) -> None:
+async def remove_document_embeddings(document_id: str) -> None:
     """Remove all Chroma chunks for a knowledge document."""
-    await asyncio.to_thread(_delete_document_chunks_sync, document_id, owner_id)
+    await asyncio.to_thread(_delete_document_chunks_sync, document_id)
 
 
 async def ingest_knowledge_document(document: dict[str, Any]) -> dict[str, Any]:
@@ -130,10 +121,7 @@ async def ingest_knowledge_document(document: dict[str, Any]) -> dict[str, Any]:
     status = document.get("status")
     if status != "Published":
         try:
-            await remove_document_embeddings(
-                str(document["_id"]),
-                str(document["owner_id"]),
-            )
+            await remove_document_embeddings(str(document["_id"]))
         except Exception:
             logger.exception(
                 "Failed to clear embeddings for non-published document %s",
@@ -142,6 +130,18 @@ async def ingest_knowledge_document(document: dict[str, Any]) -> dict[str, Any]:
         return {
             "ingestion_status": "not_indexed",
             "ingestion_error": None,
+            "ingested_at": None,
+            "chunk_count": 0,
+        }
+
+    workspace_id = str(document.get("workspace_id") or "").strip()
+    if not workspace_id:
+        return {
+            "ingestion_status": "failed",
+            "ingestion_error": (
+                "Cannot index knowledge without workspace_id. "
+                "Run the MongoDB workspace backfill, then Chroma re-index."
+            ),
             "ingested_at": None,
             "chunk_count": 0,
         }

@@ -1,4 +1,10 @@
 import { api } from "@/services/api"
+import {
+  DEFAULT_PAGE_SIZE,
+  mapPaginated,
+  type PaginatedApi,
+  type PaginatedList,
+} from "@/types/pagination"
 import type {
   TeamMember,
   TeamMemberCreatePayload,
@@ -8,16 +14,18 @@ import type {
 
 export async function listTeamMembers(
   params: TeamMemberListParams = {},
-): Promise<TeamMember[]> {
+): Promise<PaginatedList<TeamMember>> {
   const query = params.query?.trim()
-  const { data } = await api.get<TeamMember[]>("/team", {
+  const { data } = await api.get<PaginatedApi<TeamMember>>("/team", {
     params: {
       q: query || undefined,
       role: params.role || undefined,
       status: params.status || undefined,
+      page: params.page ?? 1,
+      page_size: params.pageSize ?? DEFAULT_PAGE_SIZE,
     },
   })
-  return data
+  return mapPaginated(data)
 }
 
 export async function getTeamMember(memberId: string): Promise<TeamMember> {
@@ -36,7 +44,10 @@ export async function updateTeamMember(
   memberId: string,
   payload: TeamMemberUpdatePayload,
 ): Promise<TeamMember> {
-  const { data } = await api.patch<TeamMember>(`/team/${memberId}`, payload)
+  const { data } = await api.patch<TeamMember>(
+    `/team/${memberId}`,
+    payload,
+  )
   return data
 }
 

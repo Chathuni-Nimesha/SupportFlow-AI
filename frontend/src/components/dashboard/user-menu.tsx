@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useAuth } from "@/context/auth-provider"
+import { TEAM_ROLE_LABELS } from "@/lib/team-mappers"
 import { cn } from "@/lib/utils"
 
 type UserMenuProps = {
@@ -19,7 +20,7 @@ type UserMenuProps = {
 }
 
 export function UserMenu({ className }: UserMenuProps) {
-  const { user, logout } = useAuth()
+  const { user, currentWorkspace, logout } = useAuth()
   const navigate = useNavigate()
 
   const name = user
@@ -65,6 +66,12 @@ export function UserMenu({ className }: UserMenuProps) {
           <div className="flex flex-col gap-0.5">
             <span className="text-sm font-semibold text-foreground">{name}</span>
             <span className="text-xs text-muted-foreground">{email}</span>
+            {currentWorkspace ? (
+              <span className="text-xs text-muted-foreground">
+                {currentWorkspace.name} ·{" "}
+                {TEAM_ROLE_LABELS[currentWorkspace.role]}
+              </span>
+            ) : null}
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />

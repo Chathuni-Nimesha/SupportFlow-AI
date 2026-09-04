@@ -11,9 +11,19 @@ import {
   listConversations,
   updateConversation,
 } from "@/services/conversations"
-import { makeConversationApi, makeMessageApi } from "@/test/fixtures"
+import { makeAgentUser, makeConversationApi, makeMessageApi,
+  asPage,
+} from "@/test/fixtures"
 import { deferred, renderWithProviders } from "@/test/test-utils"
 import type { ConversationStatus } from "@/types/conversations"
+import { fetchCurrentUser } from "@/services/auth"
+
+vi.mock("@/services/auth", () => ({
+  fetchCurrentUser: vi.fn(),
+  loginUser: vi.fn(),
+  logoutUser: vi.fn(),
+  registerUser: vi.fn(),
+}))
 
 vi.mock("@/services/conversations", () => ({
   listConversations: vi.fn(),
@@ -47,7 +57,7 @@ async function openConversationDetail(user: UserEvent, name = "Elena Park") {
 
 describe("ConversationsInbox", () => {
   it("shows a loading state while conversations are fetched", async () => {
-    const pending = deferred<ReturnType<typeof makeConversationApi>[]>()
+    const pending = deferred<ReturnType<typeof asPage<ReturnType<typeof makeConversationApi>>>>()
     vi.mocked(listConversations).mockReturnValue(pending.promise)
 
     renderWithProviders(<ConversationsInbox />)
@@ -56,7 +66,7 @@ describe("ConversationsInbox", () => {
       await screen.findByText("Loading conversations…"),
     ).toBeInTheDocument()
 
-    pending.resolve([])
+    pending.resolve(asPage([]))
     await waitFor(() => {
       expect(
         screen.queryByText("Loading conversations…"),
@@ -65,7 +75,7 @@ describe("ConversationsInbox", () => {
   })
 
   it("shows an empty state when the API returns no conversations", async () => {
-    vi.mocked(listConversations).mockResolvedValue([])
+    vi.mocked(listConversations).mockResolvedValue(asPage([]))
 
     renderWithProviders(<ConversationsInbox />)
 
@@ -94,7 +104,7 @@ describe("ConversationsInbox", () => {
   it("renders API-backed conversations and their detail", async () => {
     const user = userEvent.setup()
     const conversation = makeConversationApi()
-    vi.mocked(listConversations).mockResolvedValue([conversation])
+    vi.mocked(listConversations).mockResolvedValue(asPage([conversation]))
     vi.mocked(getConversation).mockResolvedValue(conversation)
     vi.mocked(listConversationMessages).mockResolvedValue([makeMessageApi()])
 
@@ -124,7 +134,7 @@ describe("ConversationsInbox", () => {
       last_message: "Shipping is delayed",
       subject: "Shipping delay",
     })
-    vi.mocked(listConversations).mockResolvedValue([first, second])
+    vi.mocked(listConversations).mockResolvedValue(asPage([first, second]))
     vi.mocked(getConversation).mockImplementation(async (id) =>
       id === "conv-2" ? second : first,
     )
@@ -155,7 +165,7 @@ describe("ConversationsInbox", () => {
 
   it("opens the new conversation sheet with the actual form fields", async () => {
     const user = userEvent.setup()
-    vi.mocked(listConversations).mockResolvedValue([])
+    vi.mocked(listConversations).mockResolvedValue(asPage([]))
 
     renderWithProviders(<ConversationsInbox />)
     await screen.findByText("No conversations found")
@@ -185,7 +195,7 @@ describe("ConversationsInbox", () => {
       channel: "Chat",
       last_message: "Can I request a refund?",
     })
-    vi.mocked(listConversations).mockResolvedValue([])
+    vi.mocked(listConversations).mockResolvedValue(asPage([]))
     vi.mocked(createConversation).mockResolvedValue(created)
     vi.mocked(getConversation).mockResolvedValue(created)
     vi.mocked(listConversationMessages).mockResolvedValue([
@@ -217,7 +227,7 @@ describe("ConversationsInbox", () => {
     expect(
       screen.queryByRole("heading", { name: "New conversation" }),
     ).not.toBeInTheDocument()
-    expect(await screen.findByText("Elena Park")).toBeInTheDocument()
+    expect((await screen.findAllByText("Elena Park")).length).toBeGreaterThan(0)
     await waitFor(() => {
       expect(getConversation).toHaveBeenCalledWith("conv-created")
     })
@@ -225,7 +235,7 @@ describe("ConversationsInbox", () => {
 
   it("shows a create error and keeps the sheet open", async () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 })
-    vi.mocked(listConversations).mockResolvedValue([])
+    vi.mocked(listConversations).mockResolvedValue(asPage([]))
     vi.mocked(createConversation).mockRejectedValue(
       new Error("Unable to create conversation."),
     )
@@ -255,7 +265,7 @@ describe("ConversationsInbox", () => {
   it("disables submit and shows Creating… while the create request is in flight", async () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 })
     const pending = deferred<ReturnType<typeof makeConversationApi>>()
-    vi.mocked(listConversations).mockResolvedValue([])
+    vi.mocked(listConversations).mockResolvedValue(asPage([]))
     vi.mocked(createConversation).mockReturnValue(pending.promise)
 
     renderWithProviders(<ConversationsInbox />)
@@ -289,7 +299,7 @@ describe("ConversationsInbox", () => {
   it("shows the current status after a conversation is opened", async () => {
     const user = userEvent.setup()
     const conversation = makeConversationApi({ status: "Open" })
-    vi.mocked(listConversations).mockResolvedValue([conversation])
+    vi.mocked(listConversations).mockResolvedValue(asPage([conversation]))
     vi.mocked(getConversation).mockResolvedValue(conversation)
     vi.mocked(listConversationMessages).mockResolvedValue([makeMessageApi()])
 
@@ -307,7 +317,7 @@ describe("ConversationsInbox", () => {
       const user = userEvent.setup()
       const conversation = makeConversationApi({ status: "Open" })
       const updated = makeConversationApi({ status })
-      vi.mocked(listConversations).mockResolvedValue([conversation])
+      vi.mocked(listConversations).mockResolvedValue(asPage([conversation]))
       vi.mocked(getConversation).mockResolvedValue(conversation)
       vi.mocked(listConversationMessages).mockResolvedValue([makeMessageApi()])
       vi.mocked(updateConversation).mockResolvedValue(updated)
@@ -330,7 +340,7 @@ describe("ConversationsInbox", () => {
   it("shows a status update error in the existing reply error area", async () => {
     const user = userEvent.setup()
     const conversation = makeConversationApi()
-    vi.mocked(listConversations).mockResolvedValue([conversation])
+    vi.mocked(listConversations).mockResolvedValue(asPage([conversation]))
     vi.mocked(getConversation).mockResolvedValue(conversation)
     vi.mocked(listConversationMessages).mockResolvedValue([makeMessageApi()])
     vi.mocked(updateConversation).mockRejectedValue(
@@ -355,7 +365,7 @@ describe("ConversationsInbox", () => {
     const user = userEvent.setup()
     const conversation = makeConversationApi()
     const pending = deferred<ReturnType<typeof makeConversationApi>>()
-    vi.mocked(listConversations).mockResolvedValue([conversation])
+    vi.mocked(listConversations).mockResolvedValue(asPage([conversation]))
     vi.mocked(getConversation).mockResolvedValue(conversation)
     vi.mocked(listConversationMessages).mockResolvedValue([makeMessageApi()])
     vi.mocked(updateConversation).mockReturnValue(pending.promise)
@@ -379,7 +389,7 @@ describe("ConversationsInbox", () => {
 
   it("shows a messages error when conversation detail fails to load", async () => {
     const user = userEvent.setup()
-    vi.mocked(listConversations).mockResolvedValue([makeConversationApi()])
+    vi.mocked(listConversations).mockResolvedValue(asPage([makeConversationApi()]))
     vi.mocked(getConversation).mockRejectedValue(
       new Error("Unable to load conversation messages."),
     )
@@ -401,7 +411,7 @@ describe("ConversationsInbox", () => {
     const conversation = makeConversationApi()
     const pendingDetail = deferred<ReturnType<typeof makeConversationApi>>()
     const pendingMessages = deferred<ReturnType<typeof makeMessageApi>[]>()
-    vi.mocked(listConversations).mockResolvedValue([conversation])
+    vi.mocked(listConversations).mockResolvedValue(asPage([conversation]))
     vi.mocked(getConversation).mockReturnValue(pendingDetail.promise)
     vi.mocked(listConversationMessages).mockReturnValue(pendingMessages.promise)
 
@@ -419,5 +429,18 @@ describe("ConversationsInbox", () => {
     expect(
       screen.getAllByText("Can I request a refund?").length,
     ).toBeGreaterThan(0)
+  })
+
+  it("keeps conversation workflows available for AGENT", async () => {
+    localStorage.setItem("access_token", "test-token")
+    vi.mocked(fetchCurrentUser).mockResolvedValue(makeAgentUser())
+    vi.mocked(listConversations).mockResolvedValue(asPage([makeConversationApi()]))
+    vi.mocked(getConversation).mockResolvedValue(makeConversationApi())
+    vi.mocked(listConversationMessages).mockResolvedValue([makeMessageApi()])
+
+    renderWithProviders(<ConversationsInbox />)
+
+    expect(await screen.findByText("Elena Park")).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /New/ })).toBeInTheDocument()
   })
 })

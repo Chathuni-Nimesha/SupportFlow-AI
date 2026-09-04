@@ -10,6 +10,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
+import { useAuth } from "@/context/auth-provider"
 import { cn } from "@/lib/utils"
 
 const COLLAPSE_KEY = "supportflow-sidebar-collapsed"
@@ -20,6 +21,8 @@ type DashboardLayoutProps = {
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const location = useLocation()
+  const { currentWorkspace } = useAuth()
+  const workspaceScopeKey = currentWorkspace?.id ?? "none"
   const [collapsed, setCollapsed] = useState(() => {
     if (typeof window === "undefined") return false
     return window.localStorage.getItem(COLLAPSE_KEY) === "true"
@@ -61,7 +64,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             )}
           >
             <motion.div
-              key={location.pathname}
+              key={`${workspaceScopeKey}:${location.pathname}`}
               initial={{ opacity: 0, y: isFullBleed ? 0 : 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}

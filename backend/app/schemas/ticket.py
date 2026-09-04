@@ -85,6 +85,7 @@ class TicketResponse(BaseModel):
 
     id: str
     owner_id: str
+    workspace_id: str | None = None
     customer_id: str
     title: str
     description: str

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useQuery } from "@tanstack/react-query"
 
 import {
   ActivityTimeline,
@@ -12,68 +12,47 @@ import {
 } from "@/components/dashboard/home"
 import { listConversations } from "@/services/conversations"
 import { listTickets } from "@/services/tickets"
-import type { ConversationApi } from "@/types/conversations"
-import type { Ticket } from "@/types/tickets"
 import { getApiErrorMessage } from "@/utils/api-error"
 
 export function DashboardHomePage() {
-  const [conversations, setConversations] = useState<ConversationApi[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const conversationsQuery = useQuery({
+    queryKey: ["conversations", "home"],
+    queryFn: () => listConversations({ page: 1, pageSize: 5 }),
+  })
+  const recentTicketsQuery = useQuery({
+    queryKey: ["tickets", "home-recent"],
+    queryFn: () => listTickets({ page: 1, pageSize: 5 }),
+  })
+  const openTicketsQuery = useQuery({
+    queryKey: ["tickets", "open-count"],
+    queryFn: () => listTickets({ status: "OPEN", page: 1, pageSize: 1 }),
+  })
 
-  const [tickets, setTickets] = useState<Ticket[]>([])
-  const [ticketsLoading, setTicketsLoading] = useState(true)
-  const [ticketsError, setTicketsError] = useState<string | null>(null)
-
-  const loadConversations = useCallback(async () => {
-    setIsLoading(true)
-    setError(null)
-    try {
-      const data = await listConversations()
-      setConversations(data)
-    } catch (loadError) {
-      setConversations([])
-      setError(
-        getApiErrorMessage(loadError, "Unable to load conversations."),
+  const conversations = conversationsQuery.data?.items ?? []
+  const conversationError = conversationsQuery.isError
+    ? getApiErrorMessage(
+        conversationsQuery.error,
+        "Unable to load conversations.",
       )
-    } finally {
-      setIsLoading(false)
-    }
-  }, [])
-
-  const loadTickets = useCallback(async () => {
-    setTicketsLoading(true)
-    setTicketsError(null)
-    try {
-      const data = await listTickets()
-      setTickets(data)
-    } catch (loadError) {
-      setTickets([])
-      setTicketsError(getApiErrorMessage(loadError, "Unable to load tickets."))
-    } finally {
-      setTicketsLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    void loadConversations()
-    void loadTickets()
-  }, [loadConversations, loadTickets])
-
-  const openTicketCount = tickets.filter(
-    (ticket) => ticket.status === "OPEN",
-  ).length
+    : null
+  const tickets = recentTicketsQuery.data?.items ?? []
+  const ticketsError = recentTicketsQuery.isError
+    ? getApiErrorMessage(recentTicketsQuery.error, "Unable to load tickets.")
+    : null
+  const openTicketError = openTicketsQuery.isError
+    ? getApiErrorMessage(openTicketsQuery.error, "Unable to load tickets.")
+    : null
 
   return (
     <div className="space-y-6">
       <WelcomeHeader />
       <KpiCards
-        conversationCount={conversations.length}
-        isLoading={isLoading}
-        error={error}
-        openTicketCount={openTicketCount}
-        ticketsLoading={ticketsLoading}
-        ticketsError={ticketsError}
+        conversationCount={conversationsQuery.data?.total ?? 0}
+        isLoading={conversationsQuery.isLoading}
+        error={conversationError}
+        openTicketCount={openTicketsQuery.data?.total ?? 0}
+        ticketsLoading={openTicketsQuery.isLoading}
+        ticketsError={openTicketError}
       />
 
       <div className="grid gap-6 xl:grid-cols-[1.4fr_0.8fr]">
@@ -83,16 +62,16 @@ export function DashboardHomePage() {
 
       <div className="grid gap-6 xl:grid-cols-2">
         <RecentConversationsTable
-          conversations={conversations.slice(0, 5)}
-          isLoading={isLoading}
-          error={error}
-          onRetry={() => void loadConversations()}
+          conversations={conversations}
+          isLoading={conversationsQuery.isLoading}
+          error={conversationError}
+          onRetry={() => void conversationsQuery.refetch()}
         />
         <RecentTicketsTable
-          tickets={tickets.slice(0, 5)}
-          isLoading={ticketsLoading}
+          tickets={tickets}
+          isLoading={recentTicketsQuery.isLoading}
           error={ticketsError}
-          onRetry={() => void loadTickets()}
+          onRetry={() => void recentTicketsQuery.refetch()}
         />
       </div>
 

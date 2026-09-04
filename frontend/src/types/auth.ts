@@ -1,3 +1,9 @@
+export type AuthWorkspaceSummary = {
+  id: string
+  name: string
+  role: "OWNER" | "ADMIN" | "AGENT"
+}
+
 export type AuthUser = {
   id: string
   first_name: string
@@ -6,6 +12,8 @@ export type AuthUser = {
   email: string
   is_active: boolean
   created_at: string
+  default_workspace_id?: string | null
+  workspaces?: AuthWorkspaceSummary[]
 }
 
 export type AuthTokenResponse = {

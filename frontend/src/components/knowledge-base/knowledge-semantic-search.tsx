@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Loader2, Search } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
@@ -14,6 +14,7 @@ import {
 import { searchKnowledge } from "@/services/knowledge"
 import type { KnowledgeSearchHit, KnowledgeSearchResponse } from "@/types/knowledge"
 import { getApiErrorMessage } from "@/utils/api-error"
+import { useAuth } from "@/context/auth-provider"
 
 const DEFAULT_TOP_K = 5
 const QUERY_MAX_LENGTH = 2000
@@ -21,11 +22,21 @@ const QUERY_MAX_LENGTH = 2000
 type SearchStatus = "idle" | "loading" | "success" | "error"
 
 export function KnowledgeSemanticSearch() {
+  const { currentWorkspace } = useAuth()
+  const workspaceId = currentWorkspace?.id ?? null
   const [query, setQuery] = useState("")
   const [status, setStatus] = useState<SearchStatus>("idle")
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<KnowledgeSearchResponse | null>(null)
   const [lastQuery, setLastQuery] = useState("")
+
+  useEffect(() => {
+    setQuery("")
+    setStatus("idle")
+    setError(null)
+    setResult(null)
+    setLastQuery("")
+  }, [workspaceId])
 
   const runSearch = async (value: string) => {
     const cleaned = value.trim()

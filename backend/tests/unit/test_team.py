@@ -3,6 +3,9 @@
 import pytest
 from httpx import AsyncClient
 
+from app.database import mongodb as mongodb_module
+from app.models.team_member import build_team_member_document
+
 
 SAMPLE_MEMBER = {
     "first_name": "Sarah",
@@ -72,6 +75,7 @@ async def test_create_team_member(
     auth_headers: dict[str, str],
 ) -> None:
     created = await _create_member(client, auth_headers)
+    me = await _current_user(client, auth_headers)
     assert created["first_name"] == "Sarah"
     assert created["last_name"] == "Perera"
     assert created["email"] == "sarah@acme.example"
@@ -79,7 +83,9 @@ async def test_create_team_member(
     assert created["status"] == "ACTIVE"
     assert created["user_id"] is None
     assert "id" in created
-    assert "owner_id" in created
+    assert created["owner_id"] == me["id"]
+    assert created["workspace_id"] == me["default_workspace_id"]
+    assert created["workspace_id"] != me["id"]
     assert "created_at" in created
     assert "updated_at" in created
 
@@ -92,7 +98,9 @@ async def test_list_team_includes_owner_record(
     me = await _current_user(client, auth_headers)
     listed = await client.get("/api/v1/team", headers=auth_headers)
     assert listed.status_code == 200
-    members = listed.json()
+    members = listed.json()["items"]
+    assert listed.json()["total"] == 1
+    assert listed.json()["has_next"] is False
     assert len(members) == 1
     owner = members[0]
     assert owner["id"] == me["id"]
@@ -100,6 +108,8 @@ async def test_list_team_includes_owner_record(
     assert owner["role"] == "OWNER"
     assert owner["status"] == "ACTIVE"
     assert owner["email"] == me["email"]
+    assert owner["workspace_id"] == me["default_workspace_id"]
+    assert owner["workspace_id"] != me["id"]
 
 
 @pytest.mark.asyncio
@@ -110,9 +120,9 @@ async def test_list_team_members(
     await _create_member(client, auth_headers)
     listed = await client.get("/api/v1/team", headers=auth_headers)
     assert listed.status_code == 200
-    emails = {item["email"] for item in listed.json()}
+    emails = {item["email"] for item in listed.json()["items"]}
     assert "sarah@acme.example" in emails
-    assert any(item["role"] == "OWNER" for item in listed.json())
+    assert any(item["role"] == "OWNER" for item in listed.json()["items"])
 
 
 @pytest.mark.asyncio
@@ -188,7 +198,7 @@ async def test_search_team_members(
         params={"q": "sarah"},
     )
     assert searched.status_code == 200
-    emails = [item["email"] for item in searched.json()]
+    emails = [item["email"] for item in searched.json()["items"]]
     assert emails == ["sarah@acme.example"]
 
     by_email = await client.get(
@@ -196,7 +206,7 @@ async def test_search_team_members(
         headers=auth_headers,
         params={"q": "john@acme"},
     )
-    assert [item["first_name"] for item in by_email.json()] == ["John"]
+    assert [item["first_name"] for item in by_email.json()["items"]] == ["John"]
 
 
 @pytest.mark.asyncio
@@ -220,7 +230,7 @@ async def test_filter_team_members_by_role(
         params={"role": "AGENT"},
     )
     assert agents.status_code == 200
-    assert [item["email"] for item in agents.json()] == ["sarah@acme.example"]
+    assert [item["email"] for item in agents.json()["items"]] == ["sarah@acme.example"]
 
     owners = await client.get(
         "/api/v1/team",
@@ -228,8 +238,8 @@ async def test_filter_team_members_by_role(
         params={"role": "OWNER"},
     )
     assert owners.status_code == 200
-    assert len(owners.json()) == 1
-    assert owners.json()[0]["role"] == "OWNER"
+    assert len(owners.json()["items"]) == 1
+    assert owners.json()["items"][0]["role"] == "OWNER"
 
 
 @pytest.mark.asyncio
@@ -251,15 +261,15 @@ async def test_filter_team_members_by_status(
         params={"status": "ACTIVE"},
     )
     assert active.status_code == 200
-    assert all(item["status"] == "ACTIVE" for item in active.json())
-    assert created["email"] not in {item["email"] for item in active.json()}
+    assert all(item["status"] == "ACTIVE" for item in active.json()["items"])
+    assert created["email"] not in {item["email"] for item in active.json()["items"]}
 
     filtered = await client.get(
         "/api/v1/team",
         headers=auth_headers,
         params={"status": "DISABLED"},
     )
-    assert [item["id"] for item in filtered.json()] == [created["id"]]
+    assert [item["id"] for item in filtered.json()["items"]] == [created["id"]]
 
 
 @pytest.mark.asyncio
@@ -399,28 +409,37 @@ async def test_get_team_member_not_found(
 
 
 @pytest.mark.asyncio
-async def test_team_members_are_scoped_to_owner(
+async def test_team_members_are_scoped_to_workspace(
     client: AsyncClient,
     auth_headers: dict[str, str],
     sample_register_payload: dict,
 ) -> None:
     created = await _create_member(client, auth_headers)
     member_id = created["id"]
+    owner = await _current_user(client, auth_headers)
     other_headers = await _other_owner_headers(
         client,
         sample_register_payload,
     )
+    other = await _current_user(client, other_headers)
+
+    assert owner["default_workspace_id"] != other["default_workspace_id"]
 
     listed = await client.get("/api/v1/team", headers=other_headers)
     assert listed.status_code == 200
-    assert created["email"] not in {item["email"] for item in listed.json()}
-    assert all(item["role"] == "OWNER" for item in listed.json())
+    assert created["email"] not in {item["email"] for item in listed.json()["items"]}
+    assert all(item["role"] == "OWNER" for item in listed.json()["items"])
+    assert all(
+        item["workspace_id"] == other["default_workspace_id"]
+        for item in listed.json()["items"]
+    )
 
     detail = await client.get(
         f"/api/v1/team/{member_id}",
         headers=other_headers,
     )
     assert detail.status_code == 404
+    assert detail.json()["detail"] == "Team member not found."
 
     patched = await client.patch(
         f"/api/v1/team/{member_id}",
@@ -434,3 +453,111 @@ async def test_team_members_are_scoped_to_owner(
         headers=other_headers,
     )
     assert deleted.status_code == 404
+
+    still_there = await client.get(
+        f"/api/v1/team/{member_id}",
+        headers=auth_headers,
+    )
+    assert still_there.status_code == 200
+    assert still_there.json()["id"] == member_id
+    assert still_there.json()["workspace_id"] == owner["default_workspace_id"]
+    assert still_there.json()["first_name"] == "Sarah"
+
+
+@pytest.mark.asyncio
+async def test_create_team_member_ignores_client_workspace_id(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+) -> None:
+    me = await _current_user(client, auth_headers)
+    response = await client.post(
+        "/api/v1/team",
+        headers=auth_headers,
+        json={**SAMPLE_MEMBER, "workspace_id": me["id"]},
+    )
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["workspace_id"] == me["default_workspace_id"]
+    assert body["workspace_id"] != me["id"]
+    assert body["owner_id"] == me["id"]
+
+
+@pytest.mark.asyncio
+async def test_backfilled_team_member_is_accessible_in_workspace(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+) -> None:
+    me = await _current_user(client, auth_headers)
+    document = build_team_member_document(
+        owner_id=me["id"],
+        workspace_id=me["default_workspace_id"],
+        first_name="Backfilled",
+        last_name="Agent",
+        email="backfilled-agent@acme.example",
+        role="AGENT",
+        status="ACTIVE",
+        user_id=None,
+    )
+    db = mongodb_module.get_database()
+    await db.team_members.insert_one(document)
+
+    listed = await client.get("/api/v1/team", headers=auth_headers)
+    assert listed.status_code == 200
+    emails = [item["email"] for item in listed.json()["items"]]
+    assert "backfilled-agent@acme.example" in emails
+
+    detail = await client.get(
+        f"/api/v1/team/{document['_id']}",
+        headers=auth_headers,
+    )
+    assert detail.status_code == 200
+    assert detail.json()["workspace_id"] == me["default_workspace_id"]
+    assert detail.json()["owner_id"] == me["id"]
+    assert detail.json()["first_name"] == "Backfilled"
+
+
+@pytest.mark.asyncio
+async def test_list_team_does_not_create_duplicate_owner_membership(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+) -> None:
+    me = await _current_user(client, auth_headers)
+    first = await client.get("/api/v1/team", headers=auth_headers)
+    second = await client.get("/api/v1/team", headers=auth_headers)
+    assert first.status_code == 200
+    assert second.status_code == 200
+
+    db = mongodb_module.get_database()
+    owners = await db.team_members.find(
+        {"role": "OWNER", "workspace_id": me["default_workspace_id"]},
+    ).to_list(length=10)
+    assert len(owners) == 1
+    assert str(owners[0]["_id"]) == me["id"]
+    assert owners[0]["user_id"] == me["id"]
+
+
+@pytest.mark.asyncio
+async def test_knowing_member_id_cannot_bypass_workspace_isolation(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    sample_register_payload: dict,
+) -> None:
+    created = await _create_member(client, auth_headers)
+    other_headers = await _other_owner_headers(
+        client,
+        sample_register_payload,
+        email="isolation-team@acme.example",
+    )
+
+    for method, kwargs in (
+        ("get", {}),
+        ("patch", {"json": {"first_name": "Hijacked"}}),
+        ("delete", {}),
+    ):
+        response = await getattr(client, method)(
+            f"/api/v1/team/{created['id']}",
+            headers=other_headers,
+            **kwargs,
+        )
+        assert response.status_code == 404, response.text
+        assert response.json()["detail"] == "Team member not found."

@@ -15,6 +15,8 @@ from fastapi import HTTPException, Request, status
 from app.config.settings import get_settings
 
 AUTH_RATE_LIMIT_DETAIL = "Too many attempts. Please try again later."
+AI_RATE_LIMIT_DETAIL = "Too many AI requests. Please try again later."
+SEARCH_RATE_LIMIT_DETAIL = "Too many search requests. Please try again later."
 
 Clock = Callable[[], float]
 
@@ -109,3 +111,94 @@ def enforce_auth_rate_limit(action: str, request: Request, email: str | None) ->
                 detail=AUTH_RATE_LIMIT_DETAIL,
                 headers={"Retry-After": str(int(retry_after))},
             )
+
+
+def _raise_rate_limited(detail: str, retry_after: float) -> None:
+    raise HTTPException(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        detail=detail,
+        headers={"Retry-After": str(int(retry_after))},
+    )
+
+
+def _rate_limit_identity(value: str | None) -> str:
+    return (value or "").strip() or "unknown"
+
+
+def resource_rate_limit_buckets(
+    kind: str,
+    *,
+    user_id: str,
+    workspace_id: str,
+    user_limit: int,
+    workspace_limit: int,
+    window_seconds: int,
+) -> tuple[tuple[str, int, int], ...]:
+    """Workspace quota plus per-user abuse protection.
+
+    Identities must come from trusted server context (current user +
+    ``get_current_workspace``), never from the client body, query, or JWT.
+    A limit of 0 disables that bucket.
+    """
+    workspace = _rate_limit_identity(workspace_id)
+    user = _rate_limit_identity(user_id)
+    return (
+        (f"{kind}:workspace:{workspace}", workspace_limit, window_seconds),
+        (f"{kind}:user:{user}", user_limit, window_seconds),
+    )
+
+
+def _enforce_resource_rate_limit(
+    kind: str,
+    *,
+    user_id: str,
+    workspace_id: str,
+    user_limit: int,
+    workspace_limit: int,
+    window_seconds: int,
+    detail: str,
+) -> None:
+    limiter = get_auth_rate_limiter()
+    for key, max_requests, window in resource_rate_limit_buckets(
+        kind,
+        user_id=user_id,
+        workspace_id=workspace_id,
+        user_limit=user_limit,
+        workspace_limit=workspace_limit,
+        window_seconds=window_seconds,
+    ):
+        retry_after = limiter.allow(key, max_requests, window)
+        if retry_after is not None:
+            _raise_rate_limited(detail, retry_after)
+
+
+def enforce_ai_rate_limit(*, user_id: str, workspace_id: str) -> None:
+    """Throttle Gemini-backed AI answer and suggest calls.
+
+    Workspace quota protects tenant consumption. User quota prevents one
+    member from exhausting the process by themselves.
+    """
+    settings = get_settings()
+    _enforce_resource_rate_limit(
+        "ai",
+        user_id=user_id,
+        workspace_id=workspace_id,
+        user_limit=settings.ai_rate_limit,
+        workspace_limit=settings.ai_workspace_rate_limit,
+        window_seconds=settings.ai_rate_window_seconds,
+        detail=AI_RATE_LIMIT_DETAIL,
+    )
+
+
+def enforce_search_rate_limit(*, user_id: str, workspace_id: str) -> None:
+    """Throttle knowledge search (embedding retrieval)."""
+    settings = get_settings()
+    _enforce_resource_rate_limit(
+        "search",
+        user_id=user_id,
+        workspace_id=workspace_id,
+        user_limit=settings.search_rate_limit,
+        workspace_limit=settings.search_workspace_rate_limit,
+        window_seconds=settings.search_rate_window_seconds,
+        detail=SEARCH_RATE_LIMIT_DETAIL,
+    )

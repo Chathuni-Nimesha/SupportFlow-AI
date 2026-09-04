@@ -149,7 +149,11 @@ class Settings(BaseSettings):
     cors_origins: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: [
             "http://localhost:5173",
+            "http://localhost:5174",
+            "http://localhost:5175",
             "http://127.0.0.1:5173",
+            "http://127.0.0.1:5174",
+            "http://127.0.0.1:5175",
         ],
         alias="CORS_ORIGINS",
     )
@@ -220,6 +224,25 @@ class Settings(BaseSettings):
     auth_register_rate_window_seconds: int = Field(
         default=60,
         alias="AUTH_REGISTER_RATE_WINDOW_SECONDS",
+    )
+
+    # Authenticated AI / search throttling (in-memory, single process).
+    # User limits are abuse protection. Workspace limits are tenant quotas.
+    # Set a limit to 0 to disable that bucket.
+    ai_rate_limit: int = Field(default=60, alias="AI_RATE_LIMIT")
+    ai_workspace_rate_limit: int = Field(
+        default=180,
+        alias="AI_WORKSPACE_RATE_LIMIT",
+    )
+    ai_rate_window_seconds: int = Field(default=60, alias="AI_RATE_WINDOW_SECONDS")
+    search_rate_limit: int = Field(default=120, alias="SEARCH_RATE_LIMIT")
+    search_workspace_rate_limit: int = Field(
+        default=360,
+        alias="SEARCH_WORKSPACE_RATE_LIMIT",
+    )
+    search_rate_window_seconds: int = Field(
+        default=60,
+        alias="SEARCH_RATE_WINDOW_SECONDS",
     )
 
     @field_validator("cors_origins", mode="before")

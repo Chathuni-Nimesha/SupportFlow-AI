@@ -11,9 +11,19 @@ import {
   listKnowledgeDocuments,
   updateKnowledgeDocument,
 } from "@/services/knowledge"
-import { makeKnowledgeDocument } from "@/test/fixtures"
+import { makeAgentUser, makeKnowledgeDocument,
+  asPage,
+} from "@/test/fixtures"
 import { deferred, renderWithProviders } from "@/test/test-utils"
 import type { KnowledgeIngestionResponse } from "@/types/knowledge"
+import { fetchCurrentUser } from "@/services/auth"
+
+vi.mock("@/services/auth", () => ({
+  fetchCurrentUser: vi.fn(),
+  loginUser: vi.fn(),
+  logoutUser: vi.fn(),
+  registerUser: vi.fn(),
+}))
 
 vi.mock("@/services/knowledge", () => ({
   searchKnowledge: vi.fn(),
@@ -47,7 +57,7 @@ describe("KnowledgeBaseBoard", () => {
   })
 
   it("renders the Knowledge Base board chrome", async () => {
-    vi.mocked(listKnowledgeDocuments).mockResolvedValue([])
+    vi.mocked(listKnowledgeDocuments).mockResolvedValue(asPage([]))
 
     renderWithProviders(<KnowledgeBaseBoard />)
 
@@ -62,7 +72,7 @@ describe("KnowledgeBaseBoard", () => {
   })
 
   it("shows a loading state while documents are fetched", async () => {
-    const pending = deferred<ReturnType<typeof makeKnowledgeDocument>[]>()
+    const pending = deferred<ReturnType<typeof asPage<ReturnType<typeof makeKnowledgeDocument>>>>()
     vi.mocked(listKnowledgeDocuments).mockReturnValue(pending.promise)
 
     renderWithProviders(<KnowledgeBaseBoard />)
@@ -71,14 +81,14 @@ describe("KnowledgeBaseBoard", () => {
       await screen.findByText("Loading knowledge documents…"),
     ).toBeInTheDocument()
 
-    pending.resolve([])
+    pending.resolve(asPage([]))
     expect(
       await screen.findByText("No knowledge documents yet"),
     ).toBeInTheDocument()
   })
 
   it("shows an empty state when there are no documents", async () => {
-    vi.mocked(listKnowledgeDocuments).mockResolvedValue([])
+    vi.mocked(listKnowledgeDocuments).mockResolvedValue(asPage([]))
 
     renderWithProviders(<KnowledgeBaseBoard />)
 
@@ -91,7 +101,7 @@ describe("KnowledgeBaseBoard", () => {
     const user = userEvent.setup()
     vi.mocked(listKnowledgeDocuments)
       .mockRejectedValueOnce(new Error("Unable to load knowledge documents."))
-      .mockResolvedValueOnce([makeKnowledgeDocument()])
+      .mockResolvedValueOnce(asPage([makeKnowledgeDocument()]))
 
     renderWithProviders(<KnowledgeBaseBoard />)
 
@@ -109,7 +119,7 @@ describe("KnowledgeBaseBoard", () => {
 
   it("creates a document and shows it in the list", async () => {
     const user = userEvent.setup()
-    vi.mocked(listKnowledgeDocuments).mockResolvedValue([])
+    vi.mocked(listKnowledgeDocuments).mockResolvedValue(asPage([]))
     const created = makeKnowledgeDocument({
       id: "doc-created",
       title: "Shipping SLA",
@@ -150,11 +160,11 @@ describe("KnowledgeBaseBoard", () => {
     expect(
       screen.queryByRole("heading", { name: "New document" }),
     ).not.toBeInTheDocument()
-  })
+  }, 10_000)
 
   it("keeps the create sheet open and shows an error when create fails", async () => {
     const user = userEvent.setup()
-    vi.mocked(listKnowledgeDocuments).mockResolvedValue([])
+    vi.mocked(listKnowledgeDocuments).mockResolvedValue(asPage([]))
     vi.mocked(createKnowledgeDocument).mockRejectedValue(
       new Error("Unable to create document."),
     )
@@ -178,7 +188,7 @@ describe("KnowledgeBaseBoard", () => {
   it("opens document details from the list", async () => {
     const user = userEvent.setup()
     const document = makeKnowledgeDocument({ source: "handbook" })
-    vi.mocked(listKnowledgeDocuments).mockResolvedValue([document])
+    vi.mocked(listKnowledgeDocuments).mockResolvedValue(asPage([document]))
     const pending = deferred<ReturnType<typeof makeKnowledgeDocument>>()
     vi.mocked(getKnowledgeDocument).mockReturnValue(pending.promise)
 
@@ -209,7 +219,7 @@ describe("KnowledgeBaseBoard", () => {
   it("populates the edit form and saves changes", async () => {
     const user = userEvent.setup()
     const document = makeKnowledgeDocument()
-    vi.mocked(listKnowledgeDocuments).mockResolvedValue([document])
+    vi.mocked(listKnowledgeDocuments).mockResolvedValue(asPage([document]))
     const updated = makeKnowledgeDocument({
       title: "Updated refund policy",
       content: document.content,
@@ -248,12 +258,12 @@ describe("KnowledgeBaseBoard", () => {
     expect(
       await screen.findByRole("heading", { name: "Updated refund policy" }),
     ).toBeInTheDocument()
-  })
+  }, 10_000)
 
   it("changes document status through the edit form", async () => {
     const user = userEvent.setup()
     const document = makeKnowledgeDocument({ status: "Draft" })
-    vi.mocked(listKnowledgeDocuments).mockResolvedValue([document])
+    vi.mocked(listKnowledgeDocuments).mockResolvedValue(asPage([document]))
     vi.mocked(updateKnowledgeDocument).mockResolvedValue(
       makeKnowledgeDocument({ status: "Published" }),
     )
@@ -275,9 +285,9 @@ describe("KnowledgeBaseBoard", () => {
 
   it("confirms deletion and removes the document from the list", async () => {
     const user = userEvent.setup()
-    vi.mocked(listKnowledgeDocuments).mockResolvedValue([
+    vi.mocked(listKnowledgeDocuments).mockResolvedValue(asPage([
       makeKnowledgeDocument(),
-    ])
+    ]))
     vi.mocked(deleteKnowledgeDocument).mockResolvedValue(undefined)
 
     renderWithProviders(<KnowledgeBaseBoard />)
@@ -302,9 +312,9 @@ describe("KnowledgeBaseBoard", () => {
 
   it("shows a delete error without removing the document", async () => {
     const user = userEvent.setup()
-    vi.mocked(listKnowledgeDocuments).mockResolvedValue([
+    vi.mocked(listKnowledgeDocuments).mockResolvedValue(asPage([
       makeKnowledgeDocument(),
-    ])
+    ]))
     vi.mocked(deleteKnowledgeDocument).mockRejectedValue(
       new Error("Unable to delete document."),
     )
@@ -340,7 +350,7 @@ describe("KnowledgeBaseBoard", () => {
       ingestion_status: "indexed",
       chunk_count: 3,
     })
-    vi.mocked(listKnowledgeDocuments).mockResolvedValue([document])
+    vi.mocked(listKnowledgeDocuments).mockResolvedValue(asPage([document]))
     vi.mocked(getKnowledgeDocument).mockResolvedValue(document)
     const pending = deferred<KnowledgeIngestionResponse>()
     vi.mocked(ingestKnowledgeDocument).mockReturnValue(pending.promise)
@@ -368,7 +378,7 @@ describe("KnowledgeBaseBoard", () => {
   it("shows an ingest error on the detail panel", async () => {
     const user = userEvent.setup()
     const document = makeKnowledgeDocument()
-    vi.mocked(listKnowledgeDocuments).mockResolvedValue([document])
+    vi.mocked(listKnowledgeDocuments).mockResolvedValue(asPage([document]))
     vi.mocked(getKnowledgeDocument).mockResolvedValue(document)
     vi.mocked(ingestKnowledgeDocument).mockRejectedValue(
       new Error("Unable to re-ingest this document."),
@@ -384,5 +394,35 @@ describe("KnowledgeBaseBoard", () => {
     expect(
       await within(dialog).findByText("Unable to re-ingest this document."),
     ).toBeInTheDocument()
+  })
+
+  it("hides knowledge mutation controls for AGENT while keeping search and view", async () => {
+    localStorage.setItem("access_token", "test-token")
+    vi.mocked(fetchCurrentUser).mockResolvedValue(makeAgentUser())
+    const document = makeKnowledgeDocument()
+    vi.mocked(listKnowledgeDocuments).mockResolvedValue(asPage([document]))
+    vi.mocked(getKnowledgeDocument).mockResolvedValue(document)
+
+    renderWithProviders(<KnowledgeBaseBoard />)
+
+    expect(await screen.findByText(document.title)).toBeInTheDocument()
+    expect(screen.getByText("Semantic knowledge search")).toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: "New document" }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: "Delete" }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: "View" }),
+    ).toBeInTheDocument()
+
+    await userEvent.setup().click(screen.getByRole("button", { name: "View" }))
+    const dialog = await screen.findByRole("dialog")
+    expect(within(dialog).queryByRole("button", { name: "Edit" })).not.toBeInTheDocument()
+    expect(
+      within(dialog).queryByRole("button", { name: "Re-ingest" }),
+    ).not.toBeInTheDocument()
   })
 })

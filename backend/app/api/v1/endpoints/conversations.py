@@ -4,7 +4,9 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.auth.deps import get_current_user
+from app.api.deps import DEFAULT_LIST_PAGE, DEFAULT_LIST_PAGE_SIZE, PageParam, PageSizeParam
+from app.auth.deps import get_current_user, get_current_workspace
+from app.core.rate_limit import enforce_ai_rate_limit
 from app.schemas.ai import (
     AiAnswerSource,
     ConversationAiSuggestRequest,
@@ -18,6 +20,7 @@ from app.schemas.conversation import (
     ConversationResponse,
     ConversationUpdateRequest,
 )
+from app.schemas.pagination import PaginatedResponse
 from app.services import conversation_service
 from app.services.conversation_ai_service import (
     ConversationAiValidationError,
@@ -29,15 +32,22 @@ from app.services.gemini_service import (
     GeminiValidationError,
 )
 from app.services.rag_service import RagRetrievalError, RagValidationError
+from app.services.workspace_service import WorkspaceContext
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
 
-@router.get("", response_model=list[ConversationResponse])
+@router.get("", response_model=PaginatedResponse[ConversationResponse])
 async def list_conversations(
-    current_user: Annotated[UserResponse, Depends(get_current_user)],
-) -> list[ConversationResponse]:
-    return await conversation_service.list_conversations(current_user.id)
+    current_workspace: Annotated[WorkspaceContext, Depends(get_current_workspace)],
+    page: PageParam = DEFAULT_LIST_PAGE,
+    page_size: PageSizeParam = DEFAULT_LIST_PAGE_SIZE,
+) -> PaginatedResponse[ConversationResponse]:
+    return await conversation_service.list_conversations(
+        current_workspace.id,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.post(
@@ -48,18 +58,23 @@ async def list_conversations(
 async def create_conversation(
     payload: ConversationCreateRequest,
     current_user: Annotated[UserResponse, Depends(get_current_user)],
+    current_workspace: Annotated[WorkspaceContext, Depends(get_current_workspace)],
 ) -> ConversationResponse:
-    return await conversation_service.create_conversation(current_user.id, payload)
+    return await conversation_service.create_conversation(
+        workspace_id=current_workspace.id,
+        owner_id=current_user.id,
+        payload=payload,
+    )
 
 
 @router.get("/{conversation_id}", response_model=ConversationResponse)
 async def get_conversation(
     conversation_id: str,
-    current_user: Annotated[UserResponse, Depends(get_current_user)],
+    current_workspace: Annotated[WorkspaceContext, Depends(get_current_workspace)],
 ) -> ConversationResponse:
     return await conversation_service.get_conversation(
         conversation_id,
-        current_user.id,
+        current_workspace.id,
     )
 
 
@@ -68,11 +83,13 @@ async def update_conversation(
     conversation_id: str,
     payload: ConversationUpdateRequest,
     current_user: Annotated[UserResponse, Depends(get_current_user)],
+    current_workspace: Annotated[WorkspaceContext, Depends(get_current_workspace)],
 ) -> ConversationResponse:
     return await conversation_service.update_conversation(
         conversation_id,
-        current_user.id,
+        current_workspace.id,
         payload,
+        owner_id=current_user.id,
     )
 
 
@@ -82,9 +99,12 @@ async def update_conversation(
 )
 async def list_messages(
     conversation_id: str,
-    current_user: Annotated[UserResponse, Depends(get_current_user)],
+    current_workspace: Annotated[WorkspaceContext, Depends(get_current_workspace)],
 ) -> list[ConversationMessageResponse]:
-    return await conversation_service.list_messages(conversation_id, current_user.id)
+    return await conversation_service.list_messages(
+        conversation_id,
+        current_workspace.id,
+    )
 
 
 @router.post(
@@ -96,11 +116,13 @@ async def add_message(
     conversation_id: str,
     payload: ConversationMessageCreateRequest,
     current_user: Annotated[UserResponse, Depends(get_current_user)],
+    current_workspace: Annotated[WorkspaceContext, Depends(get_current_workspace)],
 ) -> ConversationMessageResponse:
     return await conversation_service.add_message(
         conversation_id,
-        current_user.id,
+        current_workspace.id,
         payload,
+        owner_id=current_user.id,
     )
 
 
@@ -111,6 +133,7 @@ async def add_message(
 async def suggest_ai_reply(
     conversation_id: str,
     current_user: Annotated[UserResponse, Depends(get_current_user)],
+    current_workspace: Annotated[WorkspaceContext, Depends(get_current_workspace)],
     payload: ConversationAiSuggestRequest | None = None,
 ) -> ConversationAiSuggestResponse:
     """
@@ -119,11 +142,15 @@ async def suggest_ai_reply(
     Suggestion only — does not create or send a conversation message.
     """
     request = payload or ConversationAiSuggestRequest()
+    enforce_ai_rate_limit(
+        user_id=current_user.id,
+        workspace_id=current_workspace.id,
+    )
 
     try:
         result = await suggest_reply(
             conversation_id=conversation_id,
-            owner_id=current_user.id,
+            workspace_id=current_workspace.id,
             top_k=request.top_k,
         )
     except ConversationAiValidationError as exc:

@@ -9,7 +9,9 @@ import { listTickets } from "@/services/tickets"
 import {
   makeConversationApi,
   makeTicket,
+  makeAgentUser,
   sampleUser,
+  asPage,
 } from "@/test/fixtures"
 import { deferred, renderWithProviders } from "@/test/test-utils"
 
@@ -35,15 +37,15 @@ vi.mock("@/services/tickets", () => ({
 describe("DashboardHomePage", () => {
   it("renders the dashboard and unavailable panels", async () => {
     vi.mocked(fetchCurrentUser).mockResolvedValue(sampleUser)
-    vi.mocked(listConversations).mockResolvedValue([])
-    vi.mocked(listTickets).mockResolvedValue([])
+    vi.mocked(listConversations).mockResolvedValue(asPage([]))
+    vi.mocked(listTickets).mockResolvedValue(asPage([]))
 
     renderWithProviders(<DashboardHomePage />)
 
     expect(await screen.findByText("Welcome back")).toBeInTheDocument()
     expect(screen.getByText("Total Conversations")).toBeInTheDocument()
     expect(screen.getAllByText("Not available").length).toBeGreaterThan(0)
-    expect(screen.getByText("No tickets yet")).toBeInTheDocument()
+    expect(await screen.findByText("No tickets yet")).toBeInTheDocument()
     expect(
       screen.getByText("Create a ticket to see recent issues here."),
     ).toBeInTheDocument()
@@ -61,27 +63,27 @@ describe("DashboardHomePage", () => {
   })
 
   it("shows a loading state for conversation data", async () => {
-    const pending = deferred<ReturnType<typeof makeConversationApi>[]>()
+    const pending = deferred<ReturnType<typeof asPage<ReturnType<typeof makeConversationApi>>>>()
     vi.mocked(listConversations).mockReturnValue(pending.promise)
-    vi.mocked(listTickets).mockResolvedValue([])
+    vi.mocked(listTickets).mockResolvedValue(asPage([]))
 
     renderWithProviders(<DashboardHomePage />)
 
     expect(await screen.findByText("Loading conversations…")).toBeInTheDocument()
-    expect(screen.getByText("Loading")).toBeInTheDocument()
+    expect(screen.getAllByText("Loading").length).toBeGreaterThan(0)
 
-    pending.resolve([])
+    pending.resolve(asPage([]))
     await waitFor(() => {
       expect(screen.queryByText("Loading conversations…")).not.toBeInTheDocument()
     })
   })
 
   it("displays the live conversation count from the API", async () => {
-    vi.mocked(listConversations).mockResolvedValue([
+    vi.mocked(listConversations).mockResolvedValue(asPage([
       makeConversationApi(),
       makeConversationApi({ id: "conv-2", customer_name: "Noah Diaz" }),
-    ])
-    vi.mocked(listTickets).mockResolvedValue([])
+    ]))
+    vi.mocked(listTickets).mockResolvedValue(asPage([]))
 
     renderWithProviders(<DashboardHomePage />)
 
@@ -94,11 +96,19 @@ describe("DashboardHomePage", () => {
   })
 
   it("displays live tickets on the home dashboard", async () => {
-    vi.mocked(listConversations).mockResolvedValue([])
-    vi.mocked(listTickets).mockResolvedValue([
-      makeTicket(),
-      makeTicket({ id: "tkt-2", status: "RESOLVED", title: "Password reset" }),
-    ])
+    const openTicket = makeTicket()
+    const resolvedTicket = makeTicket({
+      id: "tkt-2",
+      status: "RESOLVED",
+      title: "Password reset",
+    })
+    vi.mocked(listConversations).mockResolvedValue(asPage([]))
+    vi.mocked(listTickets).mockImplementation(async (params = {}) => {
+      if (params.status === "OPEN") {
+        return asPage([openTicket], { total: 1 })
+      }
+      return asPage([openTicket, resolvedTicket])
+    })
 
     renderWithProviders(<DashboardHomePage />)
 
@@ -109,10 +119,10 @@ describe("DashboardHomePage", () => {
 
   it("shows an error state when conversations fail to load", async () => {
     const user = userEvent.setup()
-    vi.mocked(listTickets).mockResolvedValue([])
+    vi.mocked(listTickets).mockResolvedValue(asPage([]))
     vi.mocked(listConversations)
       .mockRejectedValueOnce(new Error("Unable to load conversations."))
-      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce(asPage([]))
 
     renderWithProviders(<DashboardHomePage />)
 
@@ -125,5 +135,25 @@ describe("DashboardHomePage", () => {
     await waitFor(() => {
       expect(listConversations).toHaveBeenCalledTimes(2)
     })
+  })
+
+  it("keeps support shortcuts for AGENT and hides knowledge upload", async () => {
+    localStorage.setItem("access_token", "test-token")
+    vi.mocked(fetchCurrentUser).mockResolvedValue(makeAgentUser())
+    vi.mocked(listConversations).mockResolvedValue(asPage([]))
+    vi.mocked(listTickets).mockResolvedValue(asPage([]))
+
+    renderWithProviders(<DashboardHomePage />)
+
+    expect(await screen.findByText("Welcome back, Sam")).toBeInTheDocument()
+    expect(
+      screen.getByRole("link", { name: /New conversation/ }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("link", { name: /Open AI assistant/ }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole("link", { name: /Upload docs/ }),
+    ).not.toBeInTheDocument()
   })
 })

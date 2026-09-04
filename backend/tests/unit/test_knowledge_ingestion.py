@@ -57,11 +57,17 @@ async def test_published_document_is_ingested(
         where={
             "$and": [
                 {"document_id": body["id"]},
-                {"owner_id": body["owner_id"]},
+                {"workspace_id": body["workspace_id"]},
             ],
         },
+        include=["metadatas"],
     )
     assert len(stored["ids"]) == body["chunk_count"]
+    assert stored["metadatas"]
+    for metadata in stored["metadatas"]:
+        assert metadata["workspace_id"] == body["workspace_id"]
+        assert metadata["owner_id"] == body["owner_id"]
+        assert metadata["status"] == "Published"
 
 
 @pytest.mark.asyncio
@@ -85,7 +91,7 @@ async def test_draft_document_is_not_indexed(
         where={
             "$and": [
                 {"document_id": body["id"]},
-                {"owner_id": body["owner_id"]},
+                {"workspace_id": body["workspace_id"]},
             ],
         },
     )
@@ -137,7 +143,7 @@ async def test_delete_removes_chroma_chunks(
     )
     body = created.json()
     document_id = body["id"]
-    owner_id = body["owner_id"]
+    workspace_id = body["workspace_id"]
 
     deleted = await client.delete(
         f"/api/v1/knowledge-documents/{document_id}",
@@ -147,11 +153,10 @@ async def test_delete_removes_chroma_chunks(
 
     collection = get_knowledge_collection()
     stored = collection.get(
-        where={
-            "$and": [
-                {"document_id": document_id},
-                {"owner_id": owner_id},
-            ],
-        },
+        where={"document_id": document_id},
     )
     assert stored["ids"] == []
+    leftover = collection.get(
+        where={"workspace_id": workspace_id},
+    )
+    assert leftover["ids"] == []

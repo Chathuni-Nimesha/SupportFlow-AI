@@ -1,4 +1,9 @@
-"""Team member directory business logic."""
+"""Team member directory business logic.
+
+``team_members`` is the workspace membership model. Tenant boundary is
+``workspace_id = current_workspace.id``. Role authorization is not applied
+here; OWNER role/status/delete protections keep their existing behavior.
+"""
 
 from __future__ import annotations
 
@@ -9,6 +14,7 @@ from fastapi import HTTPException, status
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
 from app.core.logging import get_logger
+from app.core.pagination import paginate_find, paginated_payload
 from app.database.mongodb import get_database
 from app.models.team_member import (
     TEAM_MEMBERS_COLLECTION,
@@ -24,6 +30,7 @@ from app.schemas.team_member import (
     TeamMemberResponse,
     TeamMemberUpdateRequest,
 )
+from app.services.workspace_service import ensure_owner_membership
 
 logger = get_logger(__name__)
 
@@ -61,6 +68,20 @@ def _db_error(action: str, exc: Exception) -> HTTPException:
     )
 
 
+def _require_id(value: str, label: str) -> str:
+    cleaned = (value or "").strip()
+    if not cleaned:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid {label}.",
+        )
+    return cleaned
+
+
+def _member_filter(member_id: str, workspace_id: str) -> dict[str, str]:
+    return {"_id": member_id, "workspace_id": workspace_id}
+
+
 def _escape_search(term: str) -> str:
     return _REGEX_SPECIAL.sub(lambda match: "\\" + match.group(0), term)
 
@@ -88,49 +109,23 @@ def _to_response(document: dict[str, Any]) -> TeamMemberResponse:
     return TeamMemberResponse.model_validate(serialize_team_member(document))
 
 
-async def ensure_owner_member(current_user: UserResponse) -> dict[str, Any]:
+async def ensure_owner_member(
+    current_user: UserResponse,
+    workspace_id: str,
+) -> dict[str, Any]:
     """Guarantee the authenticated account exists as the workspace OWNER."""
-    owner_id = current_user.id
+    workspace_id = _require_id(workspace_id, "workspace id")
+    return await ensure_owner_membership(current_user, {"_id": workspace_id})
+
+
+async def ensure_owner_member_by_id(
+    owner_id: str,
+    workspace_id: str,
+) -> dict[str, Any]:
+    """Repair OWNER membership when assigning tickets/conversations to the owner."""
+    owner_id = _require_id(owner_id, "team member id")
+    workspace_id = _require_id(workspace_id, "workspace id")
     try:
-        existing = await _members().find_one(
-            {"_id": owner_id, "owner_id": owner_id},
-        )
-        if existing is not None:
-            return existing
-
-        document = build_team_member_document(
-            owner_id=owner_id,
-            user_id=owner_id,
-            first_name=current_user.first_name,
-            last_name=current_user.last_name,
-            email=str(current_user.email),
-            role="OWNER",
-            status="ACTIVE",
-            member_id=owner_id,
-        )
-        await _members().insert_one(document)
-        return document
-    except DuplicateKeyError:
-        document = await _members().find_one(
-            {"_id": owner_id, "owner_id": owner_id},
-        )
-        if document is not None:
-            return document
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="A team member with this email already exists.",
-        )
-    except PyMongoError as exc:
-        raise _db_error("ensure owner team member", exc) from exc
-
-
-async def ensure_owner_member_by_id(owner_id: str) -> dict[str, Any]:
-    try:
-        existing = await _members().find_one(
-            {"_id": owner_id, "owner_id": owner_id},
-        )
-        if existing is not None:
-            return existing
         user = await _users().find_one({"_id": owner_id})
     except PyMongoError as exc:
         raise _db_error("ensure owner team member", exc) from exc
@@ -140,42 +135,16 @@ async def ensure_owner_member_by_id(owner_id: str) -> dict[str, Any]:
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Team member not found.",
         )
-
-    document = build_team_member_document(
-        owner_id=owner_id,
-        user_id=owner_id,
-        first_name=user["first_name"],
-        last_name=user["last_name"],
-        email=user["email"],
-        role="OWNER",
-        status="ACTIVE",
-        member_id=owner_id,
-    )
-    try:
-        await _members().insert_one(document)
-        return document
-    except DuplicateKeyError:
-        found = await _members().find_one({"_id": owner_id, "owner_id": owner_id})
-        if found is not None:
-            return found
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="A team member with this email already exists.",
-        )
-    except PyMongoError as exc:
-        raise _db_error("ensure owner team member", exc) from exc
+    return await ensure_owner_membership(user, {"_id": workspace_id})
 
 
-async def _get_owned_member(member_id: str, owner_id: str) -> dict[str, Any]:
-    if not member_id or not member_id.strip():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid team member id.",
-        )
+async def _get_workspace_member(member_id: str, workspace_id: str) -> dict[str, Any]:
+    member_id = _require_id(member_id, "team member id")
+    workspace_id = _require_id(workspace_id, "workspace id")
 
     try:
         document = await _members().find_one(
-            {"_id": member_id, "owner_id": owner_id},
+            _member_filter(member_id, workspace_id),
         )
     except PyMongoError as exc:
         raise _db_error("fetch team member", exc) from exc
@@ -188,21 +157,43 @@ async def _get_owned_member(member_id: str, owner_id: str) -> dict[str, Any]:
     return document
 
 
+def _membership_in_workspace(document: dict[str, Any] | None, workspace_id: str) -> bool:
+    if document is None:
+        return False
+    return str(document.get("workspace_id") or "") == workspace_id
+
+
 async def require_assignable_member(
     member_id: str | None,
-    owner_id: str,
+    workspace_id: str,
+    *,
+    owner_id: str | None = None,
 ) -> str | None:
-    """Return a team member id that may own a ticket assignment."""
+    """Return a team member id that may receive a ticket or conversation assignment."""
     if member_id is None:
         return None
     cleaned = member_id.strip()
     if not cleaned:
         return None
 
-    if cleaned == owner_id:
-        document = await ensure_owner_member_by_id(owner_id)
-    else:
-        document = await _get_owned_member(cleaned, owner_id)
+    workspace_id = _require_id(workspace_id, "workspace id")
+
+    try:
+        document = await _members().find_one(
+            _member_filter(cleaned, workspace_id),
+        )
+    except PyMongoError as extra:
+        raise _db_error("fetch team member", extra) from extra
+
+    if document is None and owner_id and cleaned == owner_id:
+        repaired = await ensure_owner_member_by_id(owner_id, workspace_id)
+        document = repaired if _membership_in_workspace(repaired, workspace_id) else None
+
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Team member not found.",
+        )
 
     if document.get("status") != "ACTIVE":
         raise HTTPException(
@@ -213,23 +204,28 @@ async def require_assignable_member(
 
 
 async def member_summaries(
-    owner_id: str,
+    workspace_id: str,
     member_ids: list[str],
+    *,
+    owner_id: str | None = None,
 ) -> dict[str, dict[str, Any]]:
     unique_ids = [mid for mid in dict.fromkeys(member_ids) if mid]
     if not unique_ids:
         return {}
 
-    if owner_id in unique_ids:
-        await ensure_owner_member_by_id(owner_id)
+    workspace_id = _require_id(workspace_id, "workspace id")
+    if owner_id and owner_id in unique_ids:
+        repaired = await ensure_owner_member_by_id(owner_id, workspace_id)
+        if not _membership_in_workspace(repaired, workspace_id):
+            unique_ids = [mid for mid in unique_ids if mid != owner_id]
 
     try:
         cursor = _members().find(
-            {"_id": {"$in": unique_ids}, "owner_id": owner_id},
+            {"_id": {"$in": unique_ids}, "workspace_id": workspace_id},
         )
         documents = await cursor.to_list(length=len(unique_ids))
-    except PyMongoError as exc:
-        raise _db_error("fetch ticket assignees", exc) from exc
+    except PyMongoError as extra:
+        raise _db_error("fetch ticket assignees", extra) from extra
 
     return {
         str(doc["_id"]): {
@@ -245,14 +241,17 @@ async def member_summaries(
 
 async def list_team_members(
     current_user: UserResponse,
+    workspace_id: str,
     *,
     query: str | None = None,
     role: str | None = None,
     member_status: str | None = None,
-) -> list[TeamMemberResponse]:
-    await ensure_owner_member(current_user)
-    owner_id = current_user.id
-    filters: dict[str, Any] = {"owner_id": owner_id}
+    page: int = 1,
+    page_size: int = 20,
+) -> dict[str, Any]:
+    workspace_id = _require_id(workspace_id, "workspace id")
+    await ensure_owner_member(current_user, workspace_id)
+    filters: dict[str, Any] = {"workspace_id": workspace_id}
     if role:
         filters["role"] = role
     if member_status:
@@ -262,30 +261,43 @@ async def list_team_members(
         filters.update(_name_email_search(cleaned))
 
     try:
-        cursor = _members().find(filters).sort("updated_at", -1)
-        documents = await cursor.to_list(length=500)
-    except PyMongoError as exc:
-        raise _db_error("list team members", exc) from exc
+        documents, total = await paginate_find(
+            _members(),
+            filters,
+            page=page,
+            page_size=page_size,
+        )
+    except PyMongoError as extra:
+        raise _db_error("list team members", extra) from extra
 
-    return [_to_response(doc) for doc in documents]
+    return paginated_payload(
+        [_to_response(doc) for doc in documents],
+        page=page,
+        page_size=page_size,
+        total=total,
+    )
 
 
 async def get_team_member(
     member_id: str,
     current_user: UserResponse,
+    workspace_id: str,
 ) -> TeamMemberResponse:
-    await ensure_owner_member(current_user)
-    document = await _get_owned_member(member_id, current_user.id)
+    await ensure_owner_member(current_user, workspace_id)
+    document = await _get_workspace_member(member_id, workspace_id)
     return _to_response(document)
 
 
 async def create_team_member(
     current_user: UserResponse,
+    workspace_id: str,
     payload: TeamMemberCreateRequest,
 ) -> TeamMemberResponse:
-    await ensure_owner_member(current_user)
+    workspace_id = _require_id(workspace_id, "workspace id")
+    await ensure_owner_member(current_user, workspace_id)
     document = build_team_member_document(
         owner_id=current_user.id,
+        workspace_id=workspace_id,
         first_name=payload.first_name,
         last_name=payload.last_name,
         email=str(payload.email),
@@ -296,13 +308,13 @@ async def create_team_member(
 
     try:
         await _members().insert_one(document)
-    except DuplicateKeyError as exc:
+    except DuplicateKeyError as extra:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="A team member with this email already exists.",
-        ) from exc
-    except PyMongoError as exc:
-        raise _db_error("create team member", exc) from exc
+        ) from extra
+    except PyMongoError as extra:
+        raise _db_error("create team member", extra) from extra
 
     return _to_response(document)
 
@@ -310,10 +322,13 @@ async def create_team_member(
 async def update_team_member(
     member_id: str,
     current_user: UserResponse,
+    workspace_id: str,
     payload: TeamMemberUpdateRequest,
 ) -> TeamMemberResponse:
-    await ensure_owner_member(current_user)
-    document = await _get_owned_member(member_id, current_user.id)
+    await ensure_owner_member(current_user, workspace_id)
+    document = await _get_workspace_member(member_id, workspace_id)
+    member_id = str(document["_id"])
+    workspace_id = _require_id(workspace_id, "workspace id")
 
     if document.get("role") == "OWNER":
         if payload.role is not None or payload.status is not None:
@@ -323,6 +338,9 @@ async def update_team_member(
             )
 
     updates = payload.model_dump(exclude_unset=True)
+    updates.pop("workspace_id", None)
+    updates.pop("owner_id", None)
+    updates.pop("user_id", None)
     if "email" in updates and updates["email"] is not None:
         updates["email"] = str(updates["email"]).strip().lower()
 
@@ -333,22 +351,21 @@ async def update_team_member(
         )
 
     updates["updated_at"] = utc_now()
+    tenant_filter = _member_filter(member_id, workspace_id)
 
     try:
         await _members().update_one(
-            {"_id": member_id, "owner_id": current_user.id},
+            tenant_filter,
             {"$set": updates},
         )
-        updated = await _members().find_one(
-            {"_id": member_id, "owner_id": current_user.id},
-        )
-    except DuplicateKeyError as exc:
+        updated = await _members().find_one(tenant_filter)
+    except DuplicateKeyError as extra:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="A team member with this email already exists.",
-        ) from exc
-    except PyMongoError as exc:
-        raise _db_error("update team member", exc) from exc
+        ) from extra
+    except PyMongoError as extra:
+        raise _db_error("update team member", extra) from extra
 
     if updated is None:
         raise HTTPException(
@@ -358,9 +375,15 @@ async def update_team_member(
     return _to_response(updated)
 
 
-async def delete_team_member(member_id: str, current_user: UserResponse) -> None:
-    await ensure_owner_member(current_user)
-    document = await _get_owned_member(member_id, current_user.id)
+async def delete_team_member(
+    member_id: str,
+    current_user: UserResponse,
+    workspace_id: str,
+) -> None:
+    await ensure_owner_member(current_user, workspace_id)
+    document = await _get_workspace_member(member_id, workspace_id)
+    member_id = str(document["_id"])
+    workspace_id = _require_id(workspace_id, "workspace id")
 
     if document.get("role") == "OWNER":
         raise HTTPException(
@@ -370,14 +393,14 @@ async def delete_team_member(member_id: str, current_user: UserResponse) -> None
 
     try:
         await _tickets().update_many(
-            {"owner_id": current_user.id, "assignee_id": member_id},
+            {"workspace_id": workspace_id, "assignee_id": member_id},
             {"$set": {"assignee_id": None, "updated_at": utc_now()}},
         )
         result = await _members().delete_one(
-            {"_id": member_id, "owner_id": current_user.id},
+            _member_filter(member_id, workspace_id),
         )
-    except PyMongoError as exc:
-        raise _db_error("delete team member", exc) from exc
+    except PyMongoError as extra:
+        raise _db_error("delete team member", extra) from extra
 
     if result.deleted_count == 0:
         raise HTTPException(
