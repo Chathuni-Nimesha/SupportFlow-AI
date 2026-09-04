@@ -159,6 +159,7 @@ def test_resource_builders_omit_workspace_id_by_default() -> None:
     for document in (conversation, message, customer, ticket, member, knowledge):
         assert document["owner_id"] == OWNER_ID
         assert "workspace_id" not in document
+    assert "customer_id" not in conversation
 
 
 def test_resource_builders_accept_optional_workspace_id() -> None:
@@ -332,6 +333,15 @@ async def test_owner_id_indexes_are_preserved(indexed_db) -> None:
     assert has_key(conversations, [("owner_id", 1), ("status", 1)])
     assert has_key(conversations, [("workspace_id", 1), ("updated_at", -1)])
     assert has_key(conversations, [("workspace_id", 1), ("status", 1)])
+    assert has_key(conversations, [("workspace_id", 1), ("customer_id", 1)])
+    assert has_key(conversations, [("workspace_id", 1), ("customer_email", 1)])
+    for spec in conversations.values():
+        keys = list(spec.get("key") or [])
+        if keys in (
+            [("workspace_id", 1), ("customer_id", 1)],
+            [("workspace_id", 1), ("customer_email", 1)],
+        ):
+            assert spec.get("unique") is not True
     assert not has_key(customers, [("owner_id", 1), ("email", 1)])
     assert has_key(customers, [("workspace_id", 1), ("email", 1)])
     assert has_key(tickets, [("owner_id", 1), ("updated_at", -1)])

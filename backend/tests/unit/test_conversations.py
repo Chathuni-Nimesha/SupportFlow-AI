@@ -41,6 +41,7 @@ async def test_create_and_list_conversations(
     assert body["subject"] == "Duplicate March charge"
     assert body["status"] == "Open"
     assert body["channel"] == "Chat"
+    assert body["customer_id"] is None
     assert body["last_message"].startswith("I was charged twice")
     assert "id" in body
     assert "owner_id" in body
@@ -537,6 +538,7 @@ async def test_same_workspace_customer_email_linking_still_works(
     )
     assert created.status_code == 201
     assert created.json()["customer_email"] == "elena@acme.example"
+    assert created.json()["customer_id"] == customer.json()["id"]
 
     updated = await client.patch(
         f"/api/v1/conversations/{created.json()['id']}",
@@ -545,6 +547,7 @@ async def test_same_workspace_customer_email_linking_still_works(
     )
     assert updated.status_code == 200
     assert updated.json()["customer_email"] == "elena@acme.example"
+    assert updated.json()["customer_id"] == customer.json()["id"]
 
 
 @pytest.mark.asyncio
@@ -553,7 +556,7 @@ async def test_conversation_cannot_attach_foreign_customer_id(
     auth_headers: dict[str, str],
     sample_register_payload: dict,
 ) -> None:
-    """Conversations store customer email/name, not a customer_id FK."""
+    """Foreign workspace customer_id is rejected and does not create a thread."""
     other_headers = await _other_owner_headers(
         client,
         sample_register_payload,
@@ -579,14 +582,13 @@ async def test_conversation_cannot_attach_foreign_customer_id(
             "customer_id": foreign_id,
         },
     )
-    assert created.status_code == 201
-    body = created.json()
-    assert "customer_id" not in body
-    assert body["customer_email"] == "elena@acme.example"
+    assert created.status_code == 404
+    assert created.json()["detail"] == "Customer not found."
 
-    listed = await client.get("/api/v1/conversations", headers=other_headers)
+    listed = await client.get("/api/v1/conversations", headers=auth_headers)
     assert listed.status_code == 200
-    assert all(item["id"] != body["id"] for item in listed.json()["items"])
+    assert listed.json()["items"] == []
+    assert listed.json()["total"] == 0
 
 
 @pytest.mark.asyncio

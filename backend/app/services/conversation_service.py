@@ -14,6 +14,7 @@ from app.models.conversation import (
     serialize_conversation,
     utc_now,
 )
+from app.models.customer import CUSTOMERS_COLLECTION
 from app.models.message import (
     MESSAGES_COLLECTION,
     build_message_document,
@@ -46,6 +47,10 @@ def _conversations():
     return _get_collection(CONVERSATIONS_COLLECTION)
 
 
+def _customers():
+    return _get_collection(CUSTOMERS_COLLECTION)
+
+
 def _messages():
     return _get_collection(MESSAGES_COLLECTION)
 
@@ -70,6 +75,63 @@ def _require_id(value: str, label: str) -> str:
 
 def _conversation_filter(conversation_id: str, workspace_id: str) -> dict[str, str]:
     return {"_id": conversation_id, "workspace_id": workspace_id}
+
+
+async def _get_workspace_customer(
+    customer_id: str,
+    workspace_id: str,
+) -> dict[str, Any]:
+    customer_id = _require_id(customer_id, "customer id")
+    workspace_id = _require_id(workspace_id, "workspace id")
+
+    try:
+        document = await _customers().find_one(
+            {"_id": customer_id, "workspace_id": workspace_id},
+        )
+    except PyMongoError as exc:
+        raise _db_error("fetch customer for conversation", exc) from exc
+
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Customer not found.",
+        )
+    return document
+
+
+async def _lookup_workspace_customer_by_email(
+    workspace_id: str,
+    email: str,
+) -> str | None:
+    workspace_id = _require_id(workspace_id, "workspace id")
+    normalized_email = str(email or "").strip().lower()
+    if not normalized_email:
+        return None
+
+    try:
+        documents = await (
+            _customers()
+            .find({"workspace_id": workspace_id, "email": normalized_email})
+            .to_list(length=2)
+        )
+    except PyMongoError as exc:
+        raise _db_error("lookup customer for conversation", exc) from exc
+
+    if len(documents) != 1:
+        return None
+    return str(documents[0]["_id"])
+
+
+async def _resolve_create_customer_id(
+    *,
+    workspace_id: str,
+    customer_id: str | None,
+    customer_email: str,
+) -> str | None:
+    if customer_id:
+        customer = await _get_workspace_customer(customer_id, workspace_id)
+        return str(customer["_id"])
+    return await _lookup_workspace_customer_by_email(workspace_id, customer_email)
 
 
 async def _get_workspace_conversation(
@@ -143,9 +205,15 @@ async def create_conversation(
         workspace_id,
         owner_id=owner_id,
     )
+    customer_id = await _resolve_create_customer_id(
+        workspace_id=workspace_id,
+        customer_id=payload.customer_id,
+        customer_email=str(payload.customer_email),
+    )
     document = build_conversation_document(
         owner_id=owner_id,
         workspace_id=workspace_id,
+        customer_id=customer_id,
         customer_name=payload.customer_name,
         customer_email=str(payload.customer_email),
         subject=payload.subject,
@@ -197,6 +265,17 @@ async def update_conversation(
             workspace_id,
             owner_id=owner_id,
         )
+    unset_fields: dict[str, str] = {}
+    if "customer_id" in updates:
+        requested_customer_id = updates.pop("customer_id")
+        if requested_customer_id is None:
+            unset_fields["customer_id"] = ""
+        else:
+            customer = await _get_workspace_customer(
+                requested_customer_id,
+                workspace_id,
+            )
+            updates["customer_id"] = str(customer["_id"])
     if "customer_email" in updates and updates["customer_email"] is not None:
         updates["customer_email"] = str(updates["customer_email"]).strip().lower()
     if "customer_name" in updates and updates["customer_name"] is not None:
@@ -204,19 +283,22 @@ async def update_conversation(
     if "subject" in updates and updates["subject"] is not None:
         updates["subject"] = updates["subject"].strip()
 
-    if not updates:
+    if not updates and not unset_fields:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No fields provided for update.",
         )
 
     updates["updated_at"] = utc_now()
+    operations: dict[str, Any] = {"$set": updates}
+    if unset_fields:
+        operations["$unset"] = unset_fields
     tenant_filter = _conversation_filter(conversation_id, workspace_id)
 
     try:
         await _conversations().update_one(
             tenant_filter,
-            {"$set": updates},
+            operations,
         )
         document = await _conversations().find_one(tenant_filter)
     except PyMongoError as exc:

@@ -5,8 +5,10 @@ import { screen } from "@testing-library/react"
 import {
   emptyNewConversationValues,
   NewConversationForm,
+  toConversationCreatePayload,
   validateNewConversationValues,
 } from "@/components/conversations/new-conversation-form"
+import { makeCustomer } from "@/test/fixtures"
 import { renderWithProviders } from "@/test/test-utils"
 
 describe("validateNewConversationValues", () => {
@@ -54,6 +56,43 @@ describe("validateNewConversationValues", () => {
   })
 })
 
+describe("toConversationCreatePayload", () => {
+  it("omits customer_id unless an existing customer is selected", () => {
+    expect(
+      toConversationCreatePayload({
+        ...emptyNewConversationValues(),
+        customer_name: "Elena Park",
+        customer_email: "elena@acme.example",
+        subject: "Refund request",
+        initial_message: "Can I request a refund?",
+      }),
+    ).toEqual({
+      customer_name: "Elena Park",
+      customer_email: "elena@acme.example",
+      subject: "Refund request",
+      channel: "Chat",
+      initial_message: "Can I request a refund?",
+    })
+    expect(
+      toConversationCreatePayload({
+        ...emptyNewConversationValues(),
+        customer_id: "cust-1",
+        customer_name: "Elena Park",
+        customer_email: "elena@acme.example",
+        subject: "Refund request",
+        initial_message: "Can I request a refund?",
+      }),
+    ).toEqual({
+      customer_name: "Elena Park",
+      customer_email: "elena@acme.example",
+      subject: "Refund request",
+      channel: "Chat",
+      initial_message: "Can I request a refund?",
+      customer_id: "cust-1",
+    })
+  })
+})
+
 describe("NewConversationForm", () => {
   it("renders required fields and displays a validation error", async () => {
     const user = userEvent.setup()
@@ -75,8 +114,38 @@ describe("NewConversationForm", () => {
     expect(screen.getByLabelText("Subject")).toBeRequired()
     expect(screen.getByLabelText("Initial customer message")).toBeRequired()
     expect(screen.getByText("Customer name is required.")).toBeInTheDocument()
+    expect(
+      screen.getByLabelText("Existing customer (optional)"),
+    ).toBeInTheDocument()
 
     await user.type(screen.getByLabelText("Customer name"), "Elena")
     expect(onChange).toHaveBeenCalled()
+  })
+
+  it("fills name and email when an existing customer is selected", async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    const customer = makeCustomer()
+
+    renderWithProviders(
+      <NewConversationForm
+        values={emptyNewConversationValues()}
+        onChange={onChange}
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+        customers={[customer]}
+      />,
+    )
+
+    await user.selectOptions(
+      screen.getByLabelText("Existing customer (optional)"),
+      customer.id,
+    )
+    expect(onChange).toHaveBeenCalledWith({
+      ...emptyNewConversationValues(),
+      customer_id: customer.id,
+      customer_name: "Elena Park",
+      customer_email: customer.email,
+    })
   })
 })

@@ -4,14 +4,17 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { customerDisplayName } from "@/lib/customer-mappers"
 import type {
   ConversationChannel,
   ConversationCreatePayload,
 } from "@/types/conversations"
+import type { Customer } from "@/types/customers"
 
 const CHANNELS: ConversationChannel[] = ["Chat", "Email", "Slack"]
 
 export type NewConversationFormValues = {
+  customer_id: string
   customer_name: string
   customer_email: string
   subject: string
@@ -21,6 +24,7 @@ export type NewConversationFormValues = {
 
 export function emptyNewConversationValues(): NewConversationFormValues {
   return {
+    customer_id: "",
     customer_name: "",
     customer_email: "",
     subject: "",
@@ -32,13 +36,18 @@ export function emptyNewConversationValues(): NewConversationFormValues {
 export function toConversationCreatePayload(
   values: NewConversationFormValues,
 ): ConversationCreatePayload {
-  return {
+  const payload: ConversationCreatePayload = {
     customer_name: values.customer_name.trim(),
     customer_email: values.customer_email.trim(),
     subject: values.subject.trim(),
     channel: values.channel,
     initial_message: values.initial_message.trim(),
   }
+  const customerId = values.customer_id.trim()
+  if (customerId) {
+    payload.customer_id = customerId
+  }
+  return payload
 }
 
 export function validateNewConversationValues(
@@ -56,11 +65,16 @@ export function validateNewConversationValues(
   return null
 }
 
+const selectClassName =
+  "h-11 w-full rounded-2xl border border-border/80 bg-background px-3 text-sm shadow-soft focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-60"
+
 type NewConversationFormProps = {
   values: NewConversationFormValues
   onChange: (values: NewConversationFormValues) => void
   onSubmit: () => void
   onCancel: () => void
+  customers?: Customer[]
+  customersLoading?: boolean
   isSaving?: boolean
   error?: string | null
 }
@@ -70,6 +84,8 @@ export function NewConversationForm({
   onChange,
   onSubmit,
   onCancel,
+  customers = [],
+  customersLoading = false,
   isSaving = false,
   error = null,
 }: NewConversationFormProps) {
@@ -78,6 +94,20 @@ export function NewConversationForm({
     value: NewConversationFormValues[K],
   ) => {
     onChange({ ...values, [key]: value })
+  }
+
+  const selectCustomer = (customerId: string) => {
+    const customer = customers.find((item) => item.id === customerId)
+    if (!customer) {
+      onChange({ ...values, customer_id: "" })
+      return
+    }
+    onChange({
+      ...values,
+      customer_id: customer.id,
+      customer_name: customerDisplayName(customer),
+      customer_email: customer.email,
+    })
   }
 
   return (
@@ -94,6 +124,32 @@ export function NewConversationForm({
             {error}
           </p>
         ) : null}
+
+        <div className="space-y-2">
+          <Label htmlFor="conv-customer">Existing customer (optional)</Label>
+          <select
+            id="conv-customer"
+            value={values.customer_id}
+            onChange={(event) => selectCustomer(event.target.value)}
+            disabled={isSaving || customersLoading}
+            className={selectClassName}
+          >
+            <option value="">
+              {customersLoading
+                ? "Loading customers…"
+                : "Enter name and email below"}
+            </option>
+            {customers.map((customer) => (
+              <option key={customer.id} value={customer.id}>
+                {customerDisplayName(customer)} · {customer.email}
+              </option>
+            ))}
+          </select>
+          <p className="text-[11px] text-muted-foreground">
+            Selecting a customer fills name and email. You can still start a
+            conversation without creating a customer.
+          </p>
+        </div>
 
         <div className="space-y-2">
           <Label htmlFor="conv-customer-name">Customer name</Label>

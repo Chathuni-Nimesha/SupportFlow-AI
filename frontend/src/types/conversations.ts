@@ -20,6 +20,7 @@ export type ConversationApi = {
   id: string
   owner_id: string
   workspace_id?: string
+  customer_id?: string | null
   customer_name: string
   customer_email: string
   subject: string
@@ -118,6 +119,7 @@ export type ConversationCreatePayload = {
   status?: ConversationStatus
   unread_count?: number
   initial_message?: string
+  customer_id?: string | null
 }
 
 export type ConversationUpdatePayload = {
@@ -128,6 +130,7 @@ export type ConversationUpdatePayload = {
   unread_count?: number
   customer_name?: string
   customer_email?: string
+  customer_id?: string | null
 }
 
 export type ConversationMessageCreatePayload = {

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import userEvent from "@testing-library/user-event"
 import type { UserEvent } from "@testing-library/user-event"
 import { screen, waitFor, within } from "@testing-library/react"
@@ -11,6 +11,7 @@ import {
   listConversations,
   updateConversation,
 } from "@/services/conversations"
+import { listCustomers } from "@/services/customers"
 import { makeAgentUser, makeConversationApi, makeMessageApi,
   asPage,
 } from "@/test/fixtures"
@@ -38,6 +39,10 @@ vi.mock("@/services/conversation-ai", () => ({
   suggestConversationReply: vi.fn(),
 }))
 
+vi.mock("@/services/customers", () => ({
+  listCustomers: vi.fn(),
+}))
+
 async function fillNewConversationForm(user: UserEvent) {
   const dialog = await screen.findByRole("dialog")
   const fill = async (label: string, value: string) => {
@@ -56,6 +61,10 @@ async function openConversationDetail(user: UserEvent, name = "Elena Park") {
 }
 
 describe("ConversationsInbox", () => {
+  beforeEach(() => {
+    vi.mocked(listCustomers).mockReset()
+    vi.mocked(listCustomers).mockResolvedValue(asPage([]))
+  })
   it("shows a loading state while conversations are fetched", async () => {
     const pending = deferred<ReturnType<typeof asPage<ReturnType<typeof makeConversationApi>>>>()
     vi.mocked(listConversations).mockReturnValue(pending.promise)
