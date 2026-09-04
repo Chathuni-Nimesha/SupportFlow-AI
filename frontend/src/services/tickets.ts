@@ -1,4 +1,10 @@
 import { api } from "@/services/api"
+import {
+  DEFAULT_PAGE_SIZE,
+  mapPaginated,
+  type PaginatedApi,
+  type PaginatedList,
+} from "@/types/pagination"
 import type {
   Ticket,
   TicketCreatePayload,
@@ -8,9 +14,9 @@ import type {
 
 export async function listTickets(
   params: TicketListParams = {},
-): Promise<Ticket[]> {
+): Promise<PaginatedList<Ticket>> {
   const query = params.query?.trim()
-  const { data } = await api.get<Ticket[]>("/tickets", {
+  const { data } = await api.get<PaginatedApi<Ticket>>("/tickets", {
     params: {
       q: query || undefined,
       status: params.status || undefined,
@@ -18,9 +24,11 @@ export async function listTickets(
       assignee_id: params.assigneeId || undefined,
       unassigned: params.unassigned || undefined,
       customer_id: params.customerId || undefined,
+      page: params.page ?? 1,
+      page_size: params.pageSize ?? DEFAULT_PAGE_SIZE,
     },
   })
-  return data
+  return mapPaginated(data)
 }
 
 export async function getTicket(ticketId: string): Promise<Ticket> {

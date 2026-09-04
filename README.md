@@ -16,13 +16,14 @@ This repository is a production-oriented AI customer-support workspace. There is
 | Conversations | Create threads, messages, replies, status (Open / Waiting / Closed / AI Resolved) |
 | Knowledge | CRUD, Draft/Published, Chroma ingestion, semantic search |
 | AI | RAG answers via Gemini, conversation suggested replies, source citations |
-| Customers | Owner-scoped customer directory with search, related conversations, and tickets |
-| Tickets | Owner-scoped tickets with status, priority, customer, and team-member assignment |
-| Team | Owner-scoped team directory (Owner / Admin / Agent) used to assign tickets |
-| Workspace | Conversation-derived analytics counts, account display, light/dark theme |
-| Isolation | Data is scoped to the signed-in account (`owner_id`) |
+| Customers | Workspace-scoped customer directory with search, related conversations, and tickets |
+| Tickets | Workspace-scoped tickets with status, priority, customer, and team-member assignment |
+| Team | Workspace membership directory (Owner / Admin / Agent) used for assignment and authorization |
+| Workspace | Active workspace selection, conversation-derived analytics, account display, light/dark theme |
+| Isolation | Data is scoped to the selected workspace (`workspace_id`), resolved server-side |
+| Health | `GET /health` reports process and MongoDB ping (`connected` / `disconnected`) |
 
-**Intentionally not included yet:** public chatbot, email invitations / teammate login, workspace_id multi-tenancy, notifications, global search, billing, SSO, Google OAuth, password reset, CSAT, email/Slack ingestion, autonomous sending.
+**Intentionally not included yet:** public chatbot, email invitations, notifications, global search, billing, SSO, Google OAuth, password reset, CSAT, email/Slack ingestion, autonomous sending.
 
 ---
 
@@ -53,7 +54,7 @@ Knowledge document (MongoDB)
   → chunking
   → embeddings (Chroma DefaultEmbeddingFunction / MiniLM)
   → ChromaDB upsert
-  → owner-scoped semantic retrieval (Published only)
+  → workspace-scoped semantic retrieval (Published only)
   → grounded Gemini generation
   → answer + sources
   → frontend
@@ -65,7 +66,7 @@ If retrieval returns no chunks, Gemini is not called. The API returns a safe “
 
 ```text
 Latest customer message in the thread
-  → same RAG pipeline (owner-scoped published knowledge)
+  → same RAG pipeline (workspace-scoped published knowledge)
   → suggested reply + sources
   → agent reviews, optionally inserts into the composer, then sends
 ```
@@ -168,7 +169,7 @@ Edit `backend/.env`. Required for a full demo:
 Useful defaults already in `.env.example`:
 
 - API: `HOST=0.0.0.0`, `PORT=8000`, `API_PREFIX=/api/v1`
-- CORS: `http://localhost:5173`, `http://127.0.0.1:5173`
+- CORS: development allows local Vite origins on ports 5173–5175 (and preview 4173). Production origins come from `CORS_ORIGINS` only — never `*` with credentials.
 - Chroma HTTP: `CHROMA_MODE=http`, `CHROMA_HOST=localhost`, `CHROMA_PORT=8001`
 - Gemini model: `GEMINI_MODEL=gemini-3.5-flash-lite`
 
@@ -363,6 +364,8 @@ npm test -- --run
 
 Backend tests use mongomock and ephemeral Chroma (`CHROMA_MODE=ephemeral` in `tests/conftest.py`). They do **not** require a live MongoDB, Chroma server, or Gemini key.
 
+GitHub Actions (`.github/workflows/ci.yml`) runs backend pytest and frontend TypeScript, Vitest, and ESLint. CI does not start MongoDB.
+
 ---
 
 ## Implemented vs unavailable
@@ -379,11 +382,15 @@ Backend tests use mongomock and ephemeral Chroma (`CHROMA_MODE=ephemeral` in `te
 | AI suggested replies | Working |
 | Conversation-derived analytics | Working |
 | Account display + theme | Working |
-| Owner-scoped data | Working |
+| Owner-scoped data | Compatibility field retained; tenancy is `workspace_id` |
 | Login/register rate limiting | Working |
-| Tickets | Working — owner-scoped CRUD, status/priority, assignment to team members |
-| Customers (CRM) | Working — owner-scoped directory, search, related conversations/tickets |
-| Team management | Working — owner-scoped directory (OWNER/ADMIN/AGENT). Members cannot log in yet |
+| AI / knowledge-search rate limiting | Working — per user and per workspace, in-memory, configurable |
+| List pagination | Working — `page` + `page_size` envelope on conversations, customers, tickets, team, knowledge documents |
+| Health check | Working — `GET /health` |
+| Conversation assignment | Working — `assigned_agent_id` must be an ACTIVE team member in the current workspace |
+| Tickets | Working — workspace-scoped CRUD, status/priority, assignment to team members |
+| Customers (CRM) | Working — workspace-scoped directory, search, related conversations/tickets |
+| Team management | Working — workspace membership (OWNER/ADMIN/AGENT) |
 | Notifications | Unavailable |
 | Global search | Unavailable (MVP scope) |
 | Billing | Unavailable (MVP scope) |
@@ -391,17 +398,21 @@ Backend tests use mongomock and ephemeral Chroma (`CHROMA_MODE=ephemeral` in `te
 | Password reset | Unavailable (MVP scope) |
 | Public customer chatbot | Unavailable (MVP scope) |
 
-Sidebar pages for tickets, customers, and team are connected to live owner-scoped APIs. Team members are a directory for ticket assignment; they cannot sign in, and email invitations are not sent.
+Sidebar pages for tickets, customers, and team are connected to live workspace-scoped APIs. Team members authenticate as users; the selected workspace membership supplies OWNER/ADMIN/AGENT authorization. Email invitations are not sent.
 
 ---
 
 ## Security (what is actually implemented)
 
 - Passwords hashed with bcrypt (passlib)
-- JWT access tokens (`HS256`, `JWT_EXPIRE_MINUTES`, default 60)
-- Mongo queries filtered by `owner_id` for conversations, messages, knowledge, customers, tickets, and team members
-- Chroma retrieval filtered by `owner_id` and `status=Published`
+- JWT access tokens (`HS256`, `JWT_EXPIRE_MINUTES`, default 60). Claims are `sub` (user id), `exp`, and `type=access` — no workspace or role
+- Active workspace is `users.default_workspace_id`, selected via `POST /api/v1/workspaces/{workspace_id}/select` and resolved by `get_current_workspace`
+- Mongo queries for customers, tickets, conversations, knowledge, and team members are filtered by `workspace_id`
+- Chroma retrieval filtered by `workspace_id` and `status=Published`
 - In-memory rate limits on login/register (process-local; defaults 30 and 20 requests / 60s)
+- In-memory rate limits on AI answer/suggest (default 60 / 60s per user and 180 / 60s per workspace) and knowledge search (default 120 / 60s per user and 360 / 60s per workspace)
+- CORS allow-list with credentials; development Vite ports 5173–5175; production origins from `CORS_ORIGINS` (wildcard rejected)
+- `GET /health` reports MongoDB connectivity without exposing connection details
 - Production (`APP_ENV=production`): refuses placeholder `JWT_SECRET`, disables debug/docs, rejects public unauthenticated Chroma HTTP hosts
 - Secrets loaded from environment / `backend/.env` (not committed)
 
@@ -413,11 +424,12 @@ Not claimed: httpOnly cookie sessions, CSRF tokens, CSP, SSO, distributed rate l
 
 - Conversations are **created by the signed-in agent**; there is no public customer intake channel.
 - AI **assists**; it does not send replies or issue refunds on its own.
-- Team members are a **directory**, not separate login accounts. There are no email invitations. `INVITED` is a status flag only.
-- Only the registering owner account can authenticate. Assigned agents cannot sign in.
-- Isolation still uses `owner_id`. A later phase will migrate to workspace-based multi-tenancy.
+- Team invitations are not emailed. `INVITED` is a status flag only.
+- Authorization uses the ACTIVE `team_members` role in the selected workspace. JWT does not carry `workspace_id` or `role`.
+- `owner_id` is still stored for compatibility and is not the tenant boundary for migrated resources.
 - JWT is stored in the browser (`localStorage`).
-- Auth rate limiting is **per Uvicorn process**, not shared across workers.
+- Auth and AI/search rate limiting is **per Uvicorn process**, not shared across workers.
+- Conversation **messages** are not paginated (a thread is loaded as a unit; lists of conversations/customers/tickets/team/knowledge documents are).
 - No production deploy config is shipped beyond environment flags.
 - Automated tests are unit-level (mocked DB / ephemeral Chroma). There is no E2E suite against real MongoDB + Chroma + Gemini.
 
@@ -437,7 +449,7 @@ Do not use `uvicorn backend.main:app` from the repository root.
 - Backend listening on port **8000**
 - `VITE_API_BASE_URL=http://localhost:8000/api/v1`
 - MongoDB reachable (`MONGODB_URI`)
-- Frontend origin allowed in `CORS_ORIGINS` (`http://localhost:5173`)
+- Frontend origin allowed in `CORS_ORIGINS`. Development also allows Vite on 5173–5175. If the UI is on another origin, add it to `CORS_ORIGINS`.
 
 ### AI returns no useful knowledge
 

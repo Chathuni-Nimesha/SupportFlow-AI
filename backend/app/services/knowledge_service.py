@@ -6,6 +6,7 @@ from fastapi import HTTPException, status
 from pymongo.errors import PyMongoError
 
 from app.core.logging import get_logger
+from app.core.pagination import paginate_find, paginated_payload
 from app.database.mongodb import get_database
 from app.models.knowledge import (
     KNOWLEDGE_DOCUMENTS_COLLECTION,
@@ -47,6 +48,20 @@ def _db_error(action: str, exc: Exception) -> HTTPException:
     )
 
 
+def _require_id(value: str, label: str) -> str:
+    cleaned = (value or "").strip()
+    if not cleaned:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid {label}.",
+        )
+    return cleaned
+
+
+def _document_filter(document_id: str, workspace_id: str) -> dict[str, str]:
+    return {"_id": document_id, "workspace_id": workspace_id}
+
+
 def _normalize_tags(tags: list[str] | None) -> list[str]:
     if tags is None:
         return []
@@ -58,19 +73,16 @@ def _normalize_tags(tags: list[str] | None) -> list[str]:
     return cleaned
 
 
-async def _get_owned_document(
+async def _get_workspace_document(
     document_id: str,
-    owner_id: str,
+    workspace_id: str,
 ) -> dict[str, Any]:
-    if not document_id or not document_id.strip():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid knowledge document id.",
-        )
+    document_id = _require_id(document_id, "knowledge document id")
+    workspace_id = _require_id(workspace_id, "workspace id")
 
     try:
         document = await _knowledge_documents().find_one(
-            {"_id": document_id, "owner_id": owner_id},
+            _document_filter(document_id, workspace_id),
         )
     except PyMongoError as exc:
         raise _db_error("fetch knowledge document", exc) from exc
@@ -85,9 +97,10 @@ async def _get_owned_document(
 
 async def _persist_ingestion_result(
     document_id: str,
-    owner_id: str,
+    workspace_id: str,
     result: dict[str, Any],
 ) -> dict[str, Any]:
+    tenant_filter = _document_filter(document_id, workspace_id)
     updates = {
         "ingestion_status": result["ingestion_status"],
         "ingestion_error": result.get("ingestion_error"),
@@ -97,12 +110,10 @@ async def _persist_ingestion_result(
     }
     try:
         await _knowledge_documents().update_one(
-            {"_id": document_id, "owner_id": owner_id},
+            tenant_filter,
             {"$set": updates},
         )
-        document = await _knowledge_documents().find_one(
-            {"_id": document_id, "owner_id": owner_id},
-        )
+        document = await _knowledge_documents().find_one(tenant_filter)
     except PyMongoError as exc:
         raise _db_error("persist ingestion status", exc) from exc
 
@@ -119,48 +130,62 @@ async def _sync_embeddings(document: dict[str, Any]) -> dict[str, Any]:
     result.pop("_exception", None)
     return await _persist_ingestion_result(
         str(document["_id"]),
-        str(document["owner_id"]),
+        str(document["workspace_id"]),
         result,
     )
 
 
 async def list_knowledge_documents(
-    owner_id: str,
-) -> list[KnowledgeDocumentResponse]:
+    workspace_id: str,
+    *,
+    page: int = 1,
+    page_size: int = 20,
+) -> dict[str, Any]:
+    workspace_id = _require_id(workspace_id, "workspace id")
     try:
-        cursor = (
-            _knowledge_documents()
-            .find({"owner_id": owner_id})
-            .sort("updated_at", -1)
+        documents, total = await paginate_find(
+            _knowledge_documents(),
+            {"workspace_id": workspace_id},
+            page=page,
+            page_size=page_size,
         )
-        documents = await cursor.to_list(length=500)
     except PyMongoError as exc:
         raise _db_error("list knowledge documents", exc) from exc
 
-    return [
+    items = [
         KnowledgeDocumentResponse.model_validate(
             serialize_knowledge_document(doc),
         )
         for doc in documents
     ]
+    return paginated_payload(
+        items,
+        page=page,
+        page_size=page_size,
+        total=total,
+    )
 
 
 async def get_knowledge_document(
     document_id: str,
-    owner_id: str,
+    workspace_id: str,
 ) -> KnowledgeDocumentResponse:
-    document = await _get_owned_document(document_id, owner_id)
+    document = await _get_workspace_document(document_id, workspace_id)
     return KnowledgeDocumentResponse.model_validate(
         serialize_knowledge_document(document),
     )
 
 
 async def create_knowledge_document(
+    *,
+    workspace_id: str,
     owner_id: str,
     payload: KnowledgeDocumentCreateRequest,
 ) -> KnowledgeDocumentResponse:
+    workspace_id = _require_id(workspace_id, "workspace id")
     document = build_knowledge_document(
         owner_id=owner_id,
+        workspace_id=workspace_id,
         title=payload.title,
         content=payload.content,
         source_type=payload.source_type,
@@ -182,12 +207,16 @@ async def create_knowledge_document(
 
 async def update_knowledge_document(
     document_id: str,
-    owner_id: str,
+    workspace_id: str,
     payload: KnowledgeDocumentUpdateRequest,
 ) -> KnowledgeDocumentResponse:
-    await _get_owned_document(document_id, owner_id)
+    await _get_workspace_document(document_id, workspace_id)
+    document_id = _require_id(document_id, "knowledge document id")
+    workspace_id = _require_id(workspace_id, "workspace id")
 
     updates = payload.model_dump(exclude_unset=True)
+    updates.pop("workspace_id", None)
+    updates.pop("owner_id", None)
     if "title" in updates and updates["title"] is not None:
         updates["title"] = updates["title"].strip()
     if "content" in updates and updates["content"] is not None:
@@ -206,15 +235,14 @@ async def update_knowledge_document(
     updates["updated_at"] = utc_now()
     # Content/status changes require re-ingestion.
     updates["ingestion_status"] = "pending"
+    tenant_filter = _document_filter(document_id, workspace_id)
 
     try:
         await _knowledge_documents().update_one(
-            {"_id": document_id, "owner_id": owner_id},
+            tenant_filter,
             {"$set": updates},
         )
-        document = await _knowledge_documents().find_one(
-            {"_id": document_id, "owner_id": owner_id},
-        )
+        document = await _knowledge_documents().find_one(tenant_filter)
     except PyMongoError as exc:
         raise _db_error("update knowledge document", exc) from exc
 
@@ -232,15 +260,14 @@ async def update_knowledge_document(
 
 async def delete_knowledge_document(
     document_id: str,
-    owner_id: str,
+    workspace_id: str,
 ) -> None:
-    await _get_owned_document(document_id, owner_id)
+    await _get_workspace_document(document_id, workspace_id)
+    document_id = _require_id(document_id, "knowledge document id")
+    workspace_id = _require_id(workspace_id, "workspace id")
 
     try:
-        await knowledge_ingestion.remove_document_embeddings(
-            document_id,
-            owner_id,
-        )
+        await knowledge_ingestion.remove_document_embeddings(document_id)
     except Exception:
         logger.exception(
             "Failed to remove Chroma embeddings for document %s",
@@ -249,7 +276,7 @@ async def delete_knowledge_document(
 
     try:
         result = await _knowledge_documents().delete_one(
-            {"_id": document_id, "owner_id": owner_id},
+            _document_filter(document_id, workspace_id),
         )
     except PyMongoError as exc:
         raise _db_error("delete knowledge document", exc) from exc
@@ -263,9 +290,9 @@ async def delete_knowledge_document(
 
 async def ingest_knowledge_document(
     document_id: str,
-    owner_id: str,
+    workspace_id: str,
 ) -> KnowledgeIngestionResponse:
-    document = await _get_owned_document(document_id, owner_id)
+    document = await _get_workspace_document(document_id, workspace_id)
     document = await _sync_embeddings(document)
     serialized = serialize_knowledge_document(document)
     response_doc = KnowledgeDocumentResponse.model_validate(serialized)

@@ -12,8 +12,19 @@ import {
   listTickets,
   updateTicket,
 } from "@/services/tickets"
-import { makeCustomer, makeOwnerMember, makeTeamMember, makeTicket } from "@/test/fixtures"
+import { makeCustomer, makeOwnerMember, makeTeamMember, makeTicket,
+  makeAgentUser,
+  asPage,
+} from "@/test/fixtures"
 import { deferred, renderWithProviders } from "@/test/test-utils"
+import { fetchCurrentUser } from "@/services/auth"
+
+vi.mock("@/services/auth", () => ({
+  fetchCurrentUser: vi.fn(),
+  loginUser: vi.fn(),
+  logoutUser: vi.fn(),
+  registerUser: vi.fn(),
+}))
 
 vi.mock("@/services/customers", () => ({
   listCustomers: vi.fn(),
@@ -47,16 +58,16 @@ describe("TicketsBoard", () => {
     vi.mocked(updateTicket).mockReset()
     vi.mocked(deleteTicket).mockReset()
     vi.mocked(listCustomers).mockReset()
-    vi.mocked(listCustomers).mockResolvedValue([makeCustomer()])
+    vi.mocked(listCustomers).mockResolvedValue(asPage([makeCustomer()]))
     vi.mocked(listTeamMembers).mockReset()
-    vi.mocked(listTeamMembers).mockResolvedValue([
+    vi.mocked(listTeamMembers).mockResolvedValue(asPage([
       makeOwnerMember(),
       makeTeamMember(),
-    ])
+    ]))
   })
 
   it("renders the tickets board chrome", async () => {
-    vi.mocked(listTickets).mockResolvedValue([])
+    vi.mocked(listTickets).mockResolvedValue(asPage([]))
 
     renderWithProviders(<TicketsBoard />)
 
@@ -72,19 +83,19 @@ describe("TicketsBoard", () => {
   })
 
   it("shows a loading state while tickets are fetched", async () => {
-    const pending = deferred<ReturnType<typeof makeTicket>[]>()
+    const pending = deferred<ReturnType<typeof asPage<ReturnType<typeof makeTicket>>>>()
     vi.mocked(listTickets).mockReturnValue(pending.promise)
 
     renderWithProviders(<TicketsBoard />)
 
     expect(await screen.findByText("Loading tickets…")).toBeInTheDocument()
 
-    pending.resolve([])
+    pending.resolve(asPage([]))
     expect(await screen.findByText("No tickets yet")).toBeInTheDocument()
   })
 
   it("shows an empty state when there are no tickets", async () => {
-    vi.mocked(listTickets).mockResolvedValue([])
+    vi.mocked(listTickets).mockResolvedValue(asPage([]))
 
     renderWithProviders(<TicketsBoard />)
 
@@ -93,7 +104,7 @@ describe("TicketsBoard", () => {
   })
 
   it("renders tickets from the API", async () => {
-    vi.mocked(listTickets).mockResolvedValue([makeTicket()])
+    vi.mocked(listTickets).mockResolvedValue(asPage([makeTicket()]))
 
     renderWithProviders(<TicketsBoard />)
 
@@ -105,7 +116,7 @@ describe("TicketsBoard", () => {
     const user = userEvent.setup()
     vi.mocked(listTickets)
       .mockRejectedValueOnce(new Error("Unable to load tickets."))
-      .mockResolvedValueOnce([makeTicket()])
+      .mockResolvedValueOnce(asPage([makeTicket()]))
 
     renderWithProviders(<TicketsBoard />)
 
@@ -121,10 +132,10 @@ describe("TicketsBoard", () => {
     "creates a ticket and shows it in the list",
     async () => {
     const user = userEvent.setup()
-    vi.mocked(listTickets).mockResolvedValue([])
+    vi.mocked(listTickets).mockResolvedValue(asPage([]))
     const created = makeTicket({ id: "tkt-created" })
     vi.mocked(createTicket).mockImplementation(async () => {
-      vi.mocked(listTickets).mockResolvedValue([created])
+      vi.mocked(listTickets).mockResolvedValue(asPage([created]))
       return created
     })
 
@@ -161,7 +172,7 @@ describe("TicketsBoard", () => {
 
   it("validates required fields before creating", async () => {
     const user = userEvent.setup()
-    vi.mocked(listTickets).mockResolvedValue([])
+    vi.mocked(listTickets).mockResolvedValue(asPage([]))
 
     renderWithProviders(<TicketsBoard />)
     await user.click(await screen.findByRole("button", { name: "New ticket" }))
@@ -176,7 +187,7 @@ describe("TicketsBoard", () => {
   it("opens ticket details", async () => {
     const user = userEvent.setup()
     const ticket = makeTicket()
-    vi.mocked(listTickets).mockResolvedValue([ticket])
+    vi.mocked(listTickets).mockResolvedValue(asPage([ticket]))
     vi.mocked(getTicket).mockResolvedValue(ticket)
 
     renderWithProviders(<TicketsBoard />)
@@ -199,10 +210,10 @@ describe("TicketsBoard", () => {
   it("populates the edit form and saves changes", async () => {
     const user = userEvent.setup()
     const ticket = makeTicket()
-    vi.mocked(listTickets).mockResolvedValue([ticket])
+    vi.mocked(listTickets).mockResolvedValue(asPage([ticket]))
     const updated = makeTicket({ title: "Duplicate charge" })
     vi.mocked(updateTicket).mockImplementation(async () => {
-      vi.mocked(listTickets).mockResolvedValue([updated])
+      vi.mocked(listTickets).mockResolvedValue(asPage([updated]))
       return updated
     })
 
@@ -236,7 +247,7 @@ describe("TicketsBoard", () => {
   it("changes status from ticket details", async () => {
     const user = userEvent.setup()
     const ticket = makeTicket()
-    vi.mocked(listTickets).mockResolvedValue([ticket])
+    vi.mocked(listTickets).mockResolvedValue(asPage([ticket]))
     vi.mocked(getTicket).mockResolvedValue(ticket)
     vi.mocked(updateTicket).mockResolvedValue(
       makeTicket({ status: "IN_PROGRESS" }),
@@ -260,9 +271,9 @@ describe("TicketsBoard", () => {
 
   it("confirms deletion and removes the ticket from the list", async () => {
     const user = userEvent.setup()
-    vi.mocked(listTickets).mockResolvedValue([makeTicket()])
+    vi.mocked(listTickets).mockResolvedValue(asPage([makeTicket()]))
     vi.mocked(deleteTicket).mockImplementation(async () => {
-      vi.mocked(listTickets).mockResolvedValue([])
+      vi.mocked(listTickets).mockResolvedValue(asPage([]))
     })
 
     renderWithProviders(<TicketsBoard />)
@@ -293,8 +304,8 @@ describe("TicketsBoard", () => {
       status: "RESOLVED",
     })
     vi.mocked(listTickets).mockImplementation(async (params = {}) => {
-      if (params.status === "RESOLVED") return [resolved]
-      return [open, resolved]
+      if (params.status === "RESOLVED") return asPage([resolved])
+      return asPage([open, resolved])
     })
 
     renderWithProviders(<TicketsBoard />)
@@ -318,9 +329,9 @@ describe("TicketsBoard", () => {
     const user = userEvent.setup()
     const refund = makeTicket()
     vi.mocked(listTickets).mockImplementation(async (params = {}) => {
-      if (params.query === "duplicate") return [refund]
-      if (params.query) return []
-      return [refund, makeTicket({ id: "tkt-2", title: "Password reset" })]
+      if (params.query === "duplicate") return asPage([refund])
+      if (params.query) return asPage([])
+      return asPage([refund, makeTicket({ id: "tkt-2", title: "Password reset" })])
     })
 
     renderWithProviders(<TicketsBoard />)
@@ -341,7 +352,7 @@ describe("TicketsBoard", () => {
 
   it("loads real team members in the assignee selector", async () => {
     const user = userEvent.setup()
-    vi.mocked(listTickets).mockResolvedValue([])
+    vi.mocked(listTickets).mockResolvedValue(asPage([]))
 
     renderWithProviders(<TicketsBoard />)
     await user.click(await screen.findByRole("button", { name: "New ticket" }))
@@ -360,7 +371,7 @@ describe("TicketsBoard", () => {
 
   it("assigns a ticket to a team member on create", async () => {
     const user = userEvent.setup()
-    vi.mocked(listTickets).mockResolvedValue([])
+    vi.mocked(listTickets).mockResolvedValue(asPage([]))
     const created = makeTicket({
       id: "tkt-assigned",
       assignee_id: "member-1",
@@ -373,7 +384,7 @@ describe("TicketsBoard", () => {
       },
     })
     vi.mocked(createTicket).mockImplementation(async () => {
-      vi.mocked(listTickets).mockResolvedValue([created])
+      vi.mocked(listTickets).mockResolvedValue(asPage([created]))
       return created
     })
 
@@ -409,7 +420,7 @@ describe("TicketsBoard", () => {
         role: "AGENT",
       },
     })
-    vi.mocked(listTickets).mockResolvedValue([ticket])
+    vi.mocked(listTickets).mockResolvedValue(asPage([ticket]))
     vi.mocked(getTicket).mockResolvedValue(ticket)
 
     renderWithProviders(<TicketsBoard />)
@@ -420,5 +431,21 @@ describe("TicketsBoard", () => {
     const dialog = await screen.findByRole("dialog")
     expect(within(dialog).getByText("Assigned to")).toBeInTheDocument()
     expect(within(dialog).getAllByText("Sarah Perera").length).toBeGreaterThan(0)
+  })
+
+  it("keeps ticket workflows available for AGENT", async () => {
+    localStorage.setItem("access_token", "test-token")
+    vi.mocked(fetchCurrentUser).mockResolvedValue(makeAgentUser())
+    vi.mocked(listTickets).mockResolvedValue(asPage([makeTicket()]))
+
+    renderWithProviders(<TicketsBoard />)
+
+    expect(
+      await screen.findByRole("heading", { name: "Tickets" }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: "New ticket" }),
+    ).toBeInTheDocument()
+    expect(await screen.findByText("Refund not received")).toBeInTheDocument()
   })
 })

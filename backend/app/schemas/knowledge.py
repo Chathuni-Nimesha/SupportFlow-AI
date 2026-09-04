@@ -39,6 +39,7 @@ class KnowledgeDocumentResponse(BaseModel):
 
     id: str
     owner_id: str
+    workspace_id: str | None = None
     title: str
     content: str
     source_type: KnowledgeSourceType

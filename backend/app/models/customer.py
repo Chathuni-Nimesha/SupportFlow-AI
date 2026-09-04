@@ -4,6 +4,8 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
+from app.models.workspace import apply_optional_workspace_id
+
 
 CUSTOMERS_COLLECTION = "customers"
 
@@ -21,10 +23,11 @@ def build_customer_document(
     phone: str | None = None,
     company: str | None = None,
     notes: str | None = None,
+    workspace_id: str | None = None,
 ) -> dict[str, Any]:
     """Create a new customer document ready for insertion."""
     now = utc_now()
-    return {
+    document = {
         "_id": str(uuid4()),
         "owner_id": owner_id,
         "first_name": first_name.strip(),
@@ -36,11 +39,12 @@ def build_customer_document(
         "created_at": now,
         "updated_at": now,
     }
+    return apply_optional_workspace_id(document, workspace_id)
 
 
 def serialize_customer(document: dict[str, Any]) -> dict[str, Any]:
     """Map a MongoDB customer document to a public payload."""
-    return {
+    payload = {
         "id": str(document["_id"]),
         "owner_id": document["owner_id"],
         "first_name": document["first_name"],
@@ -52,3 +56,7 @@ def serialize_customer(document: dict[str, Any]) -> dict[str, Any]:
         "created_at": document["created_at"],
         "updated_at": document["updated_at"],
     }
+    workspace_id = document.get("workspace_id")
+    if workspace_id:
+        payload["workspace_id"] = str(workspace_id)
+    return payload

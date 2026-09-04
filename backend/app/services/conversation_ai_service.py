@@ -34,15 +34,20 @@ def find_latest_customer_message(
 async def suggest_reply(
     *,
     conversation_id: str,
-    owner_id: str,
+    workspace_id: str,
     top_k: int = 5,
 ) -> dict[str, Any]:
     """
-    Build an AI suggested reply for a conversation using owner-scoped RAG.
+    Build an AI suggested reply for a conversation using workspace-scoped RAG.
+
+    Conversation/message access and knowledge retrieval both use workspace_id.
 
     Does not create messages, update conversation status, or send replies.
     """
-    messages = await conversation_service.list_messages(conversation_id, owner_id)
+    messages = await conversation_service.list_messages(
+        conversation_id,
+        workspace_id,
+    )
     customer_message = find_latest_customer_message(messages)
     if customer_message is None:
         raise ConversationAiValidationError(
@@ -50,7 +55,7 @@ async def suggest_reply(
         )
 
     rag_result = await answer_with_rag(
-        owner_id=owner_id,
+        workspace_id=workspace_id,
         question=customer_message.content,
         top_k=top_k,
     )

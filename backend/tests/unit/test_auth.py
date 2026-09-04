@@ -24,6 +24,9 @@ async def test_successful_registration(
     assert "password" not in data
     assert "password_hash" not in data
     assert "id" in data
+    assert data["default_workspace_id"]
+    assert data["default_workspace_id"] != data["id"]
+    assert data["workspaces"][0]["role"] == "OWNER"
 
 
 @pytest.mark.asyncio
@@ -100,6 +103,10 @@ async def test_current_user(
     )
     assert response.status_code == 200
     assert response.json()["email"] == sample_register_payload["email"]
+    body = response.json()
+    assert body["default_workspace_id"]
+    assert body["default_workspace_id"] != body["id"]
+    assert body["workspaces"][0]["name"] == "Acme Support"
 
 
 @pytest.mark.asyncio

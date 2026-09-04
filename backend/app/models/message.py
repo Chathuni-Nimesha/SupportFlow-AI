@@ -4,6 +4,8 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
+from app.models.workspace import apply_optional_workspace_id
+
 
 MESSAGES_COLLECTION = "messages"
 
@@ -21,9 +23,10 @@ def build_message_document(
     sender_type: str,
     content: str,
     sender_name: str | None = None,
+    workspace_id: str | None = None,
 ) -> dict[str, Any]:
     """Create a new message document ready for insertion."""
-    return {
+    document = {
         "_id": str(uuid4()),
         "conversation_id": conversation_id,
         "owner_id": owner_id,
@@ -32,6 +35,7 @@ def build_message_document(
         "content": content.strip(),
         "created_at": utc_now(),
     }
+    return apply_optional_workspace_id(document, workspace_id)
 
 
 def serialize_message(document: dict[str, Any]) -> dict[str, Any]:

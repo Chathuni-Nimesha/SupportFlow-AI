@@ -1,4 +1,11 @@
 import { api } from "@/services/api"
+import {
+  DEFAULT_PAGE_SIZE,
+  mapPaginated,
+  type ListPaginationParams,
+  type PaginatedApi,
+  type PaginatedList,
+} from "@/types/pagination"
 import type {
   ConversationApi,
   ConversationCreatePayload,
@@ -7,9 +14,19 @@ import type {
   ConversationUpdatePayload,
 } from "@/types/conversations"
 
-export async function listConversations(): Promise<ConversationApi[]> {
-  const { data } = await api.get<ConversationApi[]>("/conversations")
-  return data
+export async function listConversations(
+  params: ListPaginationParams = {},
+): Promise<PaginatedList<ConversationApi>> {
+  const { data } = await api.get<PaginatedApi<ConversationApi>>(
+    "/conversations",
+    {
+      params: {
+        page: params.page ?? 1,
+        page_size: params.pageSize ?? DEFAULT_PAGE_SIZE,
+      },
+    },
+  )
+  return mapPaginated(data)
 }
 
 export async function getConversation(

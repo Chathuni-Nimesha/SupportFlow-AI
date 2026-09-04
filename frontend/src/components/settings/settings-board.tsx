@@ -5,6 +5,7 @@ import { motion } from "framer-motion"
 import { AccountCard } from "@/components/settings/account-card"
 import { AppearanceCard } from "@/components/settings/appearance-card"
 import { UnavailableSettings } from "@/components/settings/unavailable-settings"
+import { WorkspaceCard } from "@/components/settings/workspace-card"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/context/auth-provider"
 import { getApiErrorMessage } from "@/utils/api-error"
@@ -75,6 +76,7 @@ export function SettingsBoard() {
       ) : null}
 
       {!showLoading && user ? <AccountCard user={user} /> : null}
+      {!showLoading && user ? <WorkspaceCard /> : null}
 
       <AppearanceCard />
       <UnavailableSettings />

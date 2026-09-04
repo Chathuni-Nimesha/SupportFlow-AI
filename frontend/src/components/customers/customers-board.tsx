@@ -5,6 +5,7 @@ import { Plus, Users } from "lucide-react"
 import { CustomerDetailPanel } from "@/components/customers/customer-detail"
 import { CustomerForm } from "@/components/customers/customer-form"
 import { CustomerList } from "@/components/customers/customer-list"
+import { ListPagination } from "@/components/common/list-pagination"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -29,6 +30,7 @@ import {
   updateCustomer,
 } from "@/services/customers"
 import type { Customer, CustomerFormValues } from "@/types/customers"
+import { DEFAULT_PAGE_SIZE } from "@/types/pagination"
 import { getApiErrorMessage } from "@/utils/api-error"
 
 type PanelMode = "closed" | "create" | "edit" | "view" | "delete"
@@ -39,6 +41,7 @@ export function CustomersBoard() {
   const queryClient = useQueryClient()
   const [search, setSearch] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
+  const [page, setPage] = useState(1)
   const [panelMode, setPanelMode] = useState<PanelMode>("closed")
   const [activeCustomer, setActiveCustomer] = useState<Customer | null>(null)
   const [formValues, setFormValues] = useState<CustomerFormValues>(
@@ -49,13 +52,19 @@ export function CustomersBoard() {
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
       setDebouncedSearch(search.trim())
+      setPage(1)
     }, 300)
     return () => window.clearTimeout(timeoutId)
   }, [search])
 
   const listQuery = useQuery({
-    queryKey: [...CUSTOMERS_QUERY_KEY, "list", debouncedSearch],
-    queryFn: () => listCustomers(debouncedSearch || undefined),
+    queryKey: [...CUSTOMERS_QUERY_KEY, "list", debouncedSearch, page],
+    queryFn: () =>
+      listCustomers({
+        query: debouncedSearch || undefined,
+        page,
+        pageSize: DEFAULT_PAGE_SIZE,
+      }),
     placeholderData: keepPreviousData,
   })
 
@@ -65,7 +74,7 @@ export function CustomersBoard() {
     enabled: panelMode === "view" && Boolean(activeCustomer?.id),
   })
 
-  const customers = listQuery.data ?? []
+  const customers = listQuery.data?.items ?? []
   const listError = listQuery.isError
     ? getApiErrorMessage(listQuery.error, "Unable to load customers.")
     : null
@@ -236,6 +245,14 @@ export function CustomersBoard() {
         onEdit={openEdit}
         onDelete={openDelete}
         deletingId={deletingId}
+      />
+      <ListPagination
+        page={listQuery.data?.page ?? page}
+        pageSize={listQuery.data?.pageSize ?? DEFAULT_PAGE_SIZE}
+        total={listQuery.data?.total ?? 0}
+        hasNext={listQuery.data?.hasNext ?? false}
+        onPageChange={setPage}
+        itemLabel="customers"
       />
 
       <Sheet

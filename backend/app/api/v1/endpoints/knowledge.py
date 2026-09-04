@@ -4,7 +4,13 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 
-from app.auth.deps import get_current_user
+from app.api.deps import DEFAULT_LIST_PAGE, DEFAULT_LIST_PAGE_SIZE, PageParam, PageSizeParam
+from app.auth.deps import (
+    get_current_user,
+    get_current_workspace,
+    require_knowledge_manager,
+)
+from app.core.rate_limit import enforce_search_rate_limit
 from app.schemas.auth import UserResponse
 from app.schemas.knowledge import (
     KnowledgeDocumentCreateRequest,
@@ -15,18 +21,26 @@ from app.schemas.knowledge import (
     KnowledgeSearchRequest,
     KnowledgeSearchResponse,
 )
+from app.schemas.pagination import PaginatedResponse
 from app.services import knowledge_service
 from app.services.knowledge_retrieval import normalize_top_k, retrieve_knowledge
+from app.services.workspace_service import WorkspaceContext
 
 router = APIRouter(prefix="/knowledge-documents", tags=["knowledge-documents"])
 search_router = APIRouter(prefix="/knowledge", tags=["knowledge"])
 
 
-@router.get("", response_model=list[KnowledgeDocumentResponse])
+@router.get("", response_model=PaginatedResponse[KnowledgeDocumentResponse])
 async def list_knowledge_documents(
-    current_user: Annotated[UserResponse, Depends(get_current_user)],
-) -> list[KnowledgeDocumentResponse]:
-    return await knowledge_service.list_knowledge_documents(current_user.id)
+    current_workspace: Annotated[WorkspaceContext, Depends(get_current_workspace)],
+    page: PageParam = DEFAULT_LIST_PAGE,
+    page_size: PageSizeParam = DEFAULT_LIST_PAGE_SIZE,
+) -> PaginatedResponse[KnowledgeDocumentResponse]:
+    return await knowledge_service.list_knowledge_documents(
+        current_workspace.id,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.post(
@@ -37,21 +51,23 @@ async def list_knowledge_documents(
 async def create_knowledge_document(
     payload: KnowledgeDocumentCreateRequest,
     current_user: Annotated[UserResponse, Depends(get_current_user)],
+    current_workspace: Annotated[WorkspaceContext, Depends(require_knowledge_manager)],
 ) -> KnowledgeDocumentResponse:
     return await knowledge_service.create_knowledge_document(
-        current_user.id,
-        payload,
+        workspace_id=current_workspace.id,
+        owner_id=current_user.id,
+        payload=payload,
     )
 
 
 @router.get("/{document_id}", response_model=KnowledgeDocumentResponse)
 async def get_knowledge_document(
     document_id: str,
-    current_user: Annotated[UserResponse, Depends(get_current_user)],
+    current_workspace: Annotated[WorkspaceContext, Depends(get_current_workspace)],
 ) -> KnowledgeDocumentResponse:
     return await knowledge_service.get_knowledge_document(
         document_id,
-        current_user.id,
+        current_workspace.id,
     )
 
 
@@ -59,11 +75,11 @@ async def get_knowledge_document(
 async def update_knowledge_document(
     document_id: str,
     payload: KnowledgeDocumentUpdateRequest,
-    current_user: Annotated[UserResponse, Depends(get_current_user)],
+    current_workspace: Annotated[WorkspaceContext, Depends(require_knowledge_manager)],
 ) -> KnowledgeDocumentResponse:
     return await knowledge_service.update_knowledge_document(
         document_id,
-        current_user.id,
+        current_workspace.id,
         payload,
     )
 
@@ -74,11 +90,11 @@ async def update_knowledge_document(
 )
 async def ingest_knowledge_document(
     document_id: str,
-    current_user: Annotated[UserResponse, Depends(get_current_user)],
+    current_workspace: Annotated[WorkspaceContext, Depends(require_knowledge_manager)],
 ) -> KnowledgeIngestionResponse:
     return await knowledge_service.ingest_knowledge_document(
         document_id,
-        current_user.id,
+        current_workspace.id,
     )
 
 
@@ -89,11 +105,11 @@ async def ingest_knowledge_document(
 )
 async def delete_knowledge_document(
     document_id: str,
-    current_user: Annotated[UserResponse, Depends(get_current_user)],
+    current_workspace: Annotated[WorkspaceContext, Depends(require_knowledge_manager)],
 ) -> Response:
     await knowledge_service.delete_knowledge_document(
         document_id,
-        current_user.id,
+        current_workspace.id,
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -102,12 +118,17 @@ async def delete_knowledge_document(
 async def search_knowledge(
     payload: KnowledgeSearchRequest,
     current_user: Annotated[UserResponse, Depends(get_current_user)],
+    current_workspace: Annotated[WorkspaceContext, Depends(get_current_workspace)],
 ) -> KnowledgeSearchResponse:
-    """Search the authenticated user's published knowledge chunks."""
+    """Search the current workspace's published knowledge chunks."""
+    enforce_search_rate_limit(
+        user_id=current_user.id,
+        workspace_id=current_workspace.id,
+    )
     top_k = normalize_top_k(payload.top_k)
     try:
         hits = await retrieve_knowledge(
-            owner_id=current_user.id,
+            workspace_id=current_workspace.id,
             query=payload.query,
             top_k=top_k,
         )

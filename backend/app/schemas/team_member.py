@@ -50,6 +50,7 @@ class TeamMemberResponse(BaseModel):
 
     id: str
     owner_id: str
+    workspace_id: str | None = None
     user_id: str | None = None
     first_name: str
     last_name: str

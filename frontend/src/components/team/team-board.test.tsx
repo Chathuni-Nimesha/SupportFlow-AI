@@ -10,8 +10,18 @@ import {
   listTeamMembers,
   updateTeamMember,
 } from "@/services/team"
-import { makeOwnerMember, makeTeamMember } from "@/test/fixtures"
+import { makeAgentUser, makeOwnerMember, makeTeamMember,
+  asPage,
+} from "@/test/fixtures"
 import { deferred, renderWithProviders } from "@/test/test-utils"
+import { fetchCurrentUser } from "@/services/auth"
+
+vi.mock("@/services/auth", () => ({
+  fetchCurrentUser: vi.fn(),
+  loginUser: vi.fn(),
+  logoutUser: vi.fn(),
+  registerUser: vi.fn(),
+}))
 
 vi.mock("@/services/team", () => ({
   listTeamMembers: vi.fn(),
@@ -31,7 +41,7 @@ describe("TeamBoard", () => {
   })
 
   it("renders the team board chrome", async () => {
-    vi.mocked(listTeamMembers).mockResolvedValue([])
+    vi.mocked(listTeamMembers).mockResolvedValue(asPage([]))
 
     renderWithProviders(<TeamBoard />)
 
@@ -45,19 +55,19 @@ describe("TeamBoard", () => {
   })
 
   it("shows a loading state while team members are fetched", async () => {
-    const pending = deferred<ReturnType<typeof makeTeamMember>[]>()
+    const pending = deferred<ReturnType<typeof asPage<ReturnType<typeof makeTeamMember>>>>()
     vi.mocked(listTeamMembers).mockReturnValue(pending.promise)
 
     renderWithProviders(<TeamBoard />)
 
     expect(await screen.findByText("Loading team members…")).toBeInTheDocument()
 
-    pending.resolve([])
+    pending.resolve(asPage([]))
     expect(await screen.findByText("No team members yet")).toBeInTheDocument()
   })
 
   it("shows an empty state when there are no team members", async () => {
-    vi.mocked(listTeamMembers).mockResolvedValue([])
+    vi.mocked(listTeamMembers).mockResolvedValue(asPage([]))
 
     renderWithProviders(<TeamBoard />)
 
@@ -66,10 +76,10 @@ describe("TeamBoard", () => {
   })
 
   it("renders team members from the API", async () => {
-    vi.mocked(listTeamMembers).mockResolvedValue([
+    vi.mocked(listTeamMembers).mockResolvedValue(asPage([
       makeOwnerMember(),
       makeTeamMember(),
-    ])
+    ]))
 
     renderWithProviders(<TeamBoard />)
 
@@ -84,7 +94,7 @@ describe("TeamBoard", () => {
     const user = userEvent.setup()
     vi.mocked(listTeamMembers)
       .mockRejectedValueOnce(new Error("Unable to load team members."))
-      .mockResolvedValueOnce([makeTeamMember()])
+      .mockResolvedValueOnce(asPage([makeTeamMember()]))
 
     renderWithProviders(<TeamBoard />)
 
@@ -101,8 +111,8 @@ describe("TeamBoard", () => {
   it("searches team members through the API", async () => {
     const user = userEvent.setup()
     vi.mocked(listTeamMembers).mockImplementation(async (params = {}) => {
-      if (params.query === "sarah") return [makeTeamMember()]
-      return [makeOwnerMember(), makeTeamMember()]
+      if (params.query === "sarah") return asPage([makeTeamMember()])
+      return asPage([makeOwnerMember(), makeTeamMember()])
     })
 
     renderWithProviders(<TeamBoard />)
@@ -119,7 +129,7 @@ describe("TeamBoard", () => {
 
   it("filters team members by role and status", async () => {
     const user = userEvent.setup()
-    vi.mocked(listTeamMembers).mockResolvedValue([makeTeamMember()])
+    vi.mocked(listTeamMembers).mockResolvedValue(asPage([makeTeamMember()]))
 
     renderWithProviders(<TeamBoard />)
     await screen.findByText("Sarah Perera")
@@ -141,10 +151,10 @@ describe("TeamBoard", () => {
 
   it("creates a team member and shows it in the list", async () => {
     const user = userEvent.setup()
-    vi.mocked(listTeamMembers).mockResolvedValue([makeOwnerMember()])
+    vi.mocked(listTeamMembers).mockResolvedValue(asPage([makeOwnerMember()]))
     const created = makeTeamMember({ id: "member-created" })
     vi.mocked(createTeamMember).mockImplementation(async () => {
-      vi.mocked(listTeamMembers).mockResolvedValue([makeOwnerMember(), created])
+      vi.mocked(listTeamMembers).mockResolvedValue(asPage([makeOwnerMember(), created]))
       return created
     })
 
@@ -175,7 +185,7 @@ describe("TeamBoard", () => {
 
   it("keeps the create sheet open and shows an error when create fails", async () => {
     const user = userEvent.setup()
-    vi.mocked(listTeamMembers).mockResolvedValue([])
+    vi.mocked(listTeamMembers).mockResolvedValue(asPage([]))
     vi.mocked(createTeamMember).mockRejectedValue(
       new Error("Unable to create team member."),
     )
@@ -199,7 +209,7 @@ describe("TeamBoard", () => {
   it("opens team member details", async () => {
     const user = userEvent.setup()
     const member = makeTeamMember()
-    vi.mocked(listTeamMembers).mockResolvedValue([member])
+    vi.mocked(listTeamMembers).mockResolvedValue(asPage([member]))
     vi.mocked(getTeamMember).mockResolvedValue(member)
 
     renderWithProviders(<TeamBoard />)
@@ -216,10 +226,10 @@ describe("TeamBoard", () => {
   it("populates the edit form and saves changes", async () => {
     const user = userEvent.setup()
     const member = makeTeamMember()
-    vi.mocked(listTeamMembers).mockResolvedValue([member])
+    vi.mocked(listTeamMembers).mockResolvedValue(asPage([member]))
     const updated = makeTeamMember({ role: "ADMIN" })
     vi.mocked(updateTeamMember).mockImplementation(async () => {
-      vi.mocked(listTeamMembers).mockResolvedValue([updated])
+      vi.mocked(listTeamMembers).mockResolvedValue(asPage([updated]))
       return updated
     })
 
@@ -247,10 +257,10 @@ describe("TeamBoard", () => {
   it("confirms disable and updates status", async () => {
     const user = userEvent.setup()
     const member = makeTeamMember()
-    vi.mocked(listTeamMembers).mockResolvedValue([member])
+    vi.mocked(listTeamMembers).mockResolvedValue(asPage([member]))
     vi.mocked(updateTeamMember).mockImplementation(async () => {
       const disabled = makeTeamMember({ status: "DISABLED" })
-      vi.mocked(listTeamMembers).mockResolvedValue([disabled])
+      vi.mocked(listTeamMembers).mockResolvedValue(asPage([disabled]))
       return disabled
     })
 
@@ -274,9 +284,9 @@ describe("TeamBoard", () => {
 
   it("confirms removal and removes the member from the list", async () => {
     const user = userEvent.setup()
-    vi.mocked(listTeamMembers).mockResolvedValue([makeTeamMember()])
+    vi.mocked(listTeamMembers).mockResolvedValue(asPage([makeTeamMember()]))
     vi.mocked(deleteTeamMember).mockImplementation(async () => {
-      vi.mocked(listTeamMembers).mockResolvedValue([])
+      vi.mocked(listTeamMembers).mockResolvedValue(asPage([]))
     })
 
     renderWithProviders(<TeamBoard />)
@@ -301,7 +311,7 @@ describe("TeamBoard", () => {
   })
 
   it("does not allow editing or removing the owner", async () => {
-    vi.mocked(listTeamMembers).mockResolvedValue([makeOwnerMember()])
+    vi.mocked(listTeamMembers).mockResolvedValue(asPage([makeOwnerMember()]))
 
     renderWithProviders(<TeamBoard />)
     await screen.findByText("Ava Chen")
@@ -309,5 +319,31 @@ describe("TeamBoard", () => {
     expect(screen.getByRole("button", { name: "Edit Ava Chen" })).toBeDisabled()
     expect(screen.getByRole("button", { name: "Disable Ava Chen" })).toBeDisabled()
     expect(screen.getByRole("button", { name: "Remove Ava Chen" })).toBeDisabled()
+  })
+
+  it("hides team mutation controls for AGENT while still allowing view", async () => {
+    localStorage.setItem("access_token", "test-token")
+    vi.mocked(fetchCurrentUser).mockResolvedValue(makeAgentUser())
+    vi.mocked(listTeamMembers).mockResolvedValue(asPage([makeTeamMember()]))
+    vi.mocked(getTeamMember).mockResolvedValue(makeTeamMember())
+
+    renderWithProviders(<TeamBoard />)
+
+    expect(await screen.findByText("Sarah Perera")).toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: "New member" }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: "Edit Sarah Perera" }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: "Disable Sarah Perera" }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: "Remove Sarah Perera" }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: "View Sarah Perera" }),
+    ).toBeInTheDocument()
   })
 })

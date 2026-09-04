@@ -3,6 +3,7 @@ import type { ConversationApi } from "@/types/conversations"
 export type Customer = {
   id: string
   owner_id: string
+  workspace_id?: string
   first_name: string
   last_name: string
   email: string

@@ -4,6 +4,8 @@ import { Bot, Plus, Upload } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/context/auth-provider"
+import { TEAM_ROLE_LABELS } from "@/lib/team-mappers"
+import { canManageKnowledge } from "@/lib/workspace-permissions"
 
 function formatToday() {
   return new Intl.DateTimeFormat("en-US", {
@@ -15,9 +17,10 @@ function formatToday() {
 }
 
 export function WelcomeHeader() {
-  const { user } = useAuth()
+  const { user, isLoading, currentWorkspace } = useAuth()
   const firstName = user?.first_name?.trim()
   const heading = firstName ? `Welcome back, ${firstName}` : "Welcome back"
+  const canUploadDocs = !isLoading && canManageKnowledge(user)
 
   return (
     <motion.div
@@ -36,6 +39,11 @@ export function WelcomeHeader() {
         <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
           Review conversations and knowledge in your workspace.
         </p>
+        {currentWorkspace ? (
+          <p className="mt-1 text-xs font-medium text-muted-foreground">
+            {currentWorkspace.name} · {TEAM_ROLE_LABELS[currentWorkspace.role]}
+          </p>
+        ) : null}
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -45,12 +53,14 @@ export function WelcomeHeader() {
             New conversation
           </Link>
         </Button>
-        <Button variant="outline" className="rounded-2xl bg-background" asChild>
-          <Link to="/dashboard/knowledge-base">
-            <Upload className="size-4" />
-            Upload docs
-          </Link>
-        </Button>
+        {canUploadDocs ? (
+          <Button variant="outline" className="rounded-2xl bg-background" asChild>
+            <Link to="/dashboard/knowledge-base">
+              <Upload className="size-4" />
+              Upload docs
+            </Link>
+          </Button>
+        ) : null}
         <Button variant="secondary" className="rounded-2xl" asChild>
           <Link to="/dashboard/ai-assistant">
             <Bot className="size-4" />

@@ -3,9 +3,12 @@ import { PanelLeftClose, PanelLeftOpen } from "lucide-react"
 import { BrandLogo } from "@/components/common/brand-logo"
 import { dashboardNavItems } from "@/components/dashboard/nav-config"
 import { SidebarItem } from "@/components/dashboard/sidebar-item"
+import { WorkspaceSwitcher } from "@/components/dashboard/workspace-switcher"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
+import { useAuth } from "@/context/auth-provider"
+import { TEAM_ROLE_LABELS } from "@/lib/team-mappers"
 import { cn } from "@/lib/utils"
 
 type SidebarProps = {
@@ -23,6 +26,12 @@ export function Sidebar({
   className,
   showCollapseControl = true,
 }: SidebarProps) {
+  const { currentWorkspace } = useAuth()
+  const workspaceName = currentWorkspace?.name ?? "AI workspace"
+  const workspaceRole = currentWorkspace
+    ? TEAM_ROLE_LABELS[currentWorkspace.role]
+    : null
+
   return (
     <aside
       className={cn(
@@ -89,11 +98,14 @@ export function Sidebar({
           {!collapsed ? (
             <div className="rounded-2xl bg-primary/5 p-3">
               <p className="text-xs font-semibold text-foreground">
-                AI workspace
+                {workspaceName}
               </p>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                Monitor conversations and train your agent from one place.
+                {workspaceRole
+                  ? `${workspaceRole} · Monitor conversations and train your agent from one place.`
+                  : "Monitor conversations and train your agent from one place."}
               </p>
+              <WorkspaceSwitcher className="mt-3" />
             </div>
           ) : null}
         </div>

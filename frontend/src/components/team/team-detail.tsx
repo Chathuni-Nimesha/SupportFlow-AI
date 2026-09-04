@@ -15,6 +15,7 @@ type TeamDetailPanelProps = {
   onClose: () => void
   onDisable: () => void
   onDelete: () => void
+  canManage?: boolean
 }
 
 export function TeamDetailPanel({
@@ -23,6 +24,7 @@ export function TeamDetailPanel({
   onClose,
   onDisable,
   onDelete,
+  canManage = true,
 }: TeamDetailPanelProps) {
   const name = teamMemberDisplayName(member)
   const owner = isWorkspaceOwner(member)
@@ -74,7 +76,7 @@ export function TeamDetailPanel({
         >
           Close
         </Button>
-        {owner ? null : (
+        {owner || !canManage ? null : (
           <>
             <Button
               type="button"

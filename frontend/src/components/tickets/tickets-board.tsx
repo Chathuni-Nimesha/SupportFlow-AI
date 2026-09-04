@@ -5,6 +5,7 @@ import { Plus, Ticket as TicketIcon } from "lucide-react"
 import { TicketDetailPanel } from "@/components/tickets/ticket-detail"
 import { TicketForm } from "@/components/tickets/ticket-form"
 import { TicketList } from "@/components/tickets/ticket-list"
+import { ListPagination } from "@/components/common/list-pagination"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -36,6 +37,7 @@ import { teamMemberDisplayName } from "@/lib/team-mappers"
 import type { TeamMember } from "@/types/team"
 import type { Ticket, TicketFormValues, TicketPriority, TicketStatus } from "@/types/tickets"
 import { TICKET_PRIORITIES, TICKET_STATUSES } from "@/types/tickets"
+import { DEFAULT_PAGE_SIZE, PICKER_PAGE_SIZE } from "@/types/pagination"
 import { getApiErrorMessage } from "@/utils/api-error"
 
 type PanelMode = "closed" | "create" | "edit" | "view" | "delete"
@@ -70,6 +72,7 @@ export function TicketsBoard() {
   const [statusFilter, setStatusFilter] = useState<TicketStatus | "">("")
   const [priorityFilter, setPriorityFilter] = useState<TicketPriority | "">("")
   const [assigneeFilter, setAssigneeFilter] = useState("")
+  const [page, setPage] = useState(1)
   const [panelMode, setPanelMode] = useState<PanelMode>("closed")
   const [activeTicket, setActiveTicket] = useState<Ticket | null>(null)
   const [formValues, setFormValues] = useState<TicketFormValues>(
@@ -80,9 +83,14 @@ export function TicketsBoard() {
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
       setDebouncedSearch(search.trim())
+      setPage(1)
     }, 300)
     return () => window.clearTimeout(timeoutId)
   }, [search])
+
+  useEffect(() => {
+    setPage(1)
+  }, [statusFilter, priorityFilter, assigneeFilter])
 
   const listParams = {
     query: debouncedSearch || undefined,
@@ -93,6 +101,8 @@ export function TicketsBoard() {
         ? assigneeFilter
         : undefined,
     unassigned: assigneeFilter === "unassigned" ? true : undefined,
+    page,
+    pageSize: DEFAULT_PAGE_SIZE,
   }
 
   const listQuery = useQuery({
@@ -102,14 +112,14 @@ export function TicketsBoard() {
   })
 
   const customersQuery = useQuery({
-    queryKey: [...CUSTOMERS_QUERY_KEY, "list", ""],
-    queryFn: () => listCustomers(),
+    queryKey: [...CUSTOMERS_QUERY_KEY, "list", "picker"],
+    queryFn: () => listCustomers({ page: 1, pageSize: PICKER_PAGE_SIZE }),
     enabled: panelMode === "create" || panelMode === "edit",
   })
 
   const teamQuery = useQuery({
-    queryKey: [...TEAM_QUERY_KEY, "list", {}],
-    queryFn: () => listTeamMembers(),
+    queryKey: [...TEAM_QUERY_KEY, "list", "picker"],
+    queryFn: () => listTeamMembers({ page: 1, pageSize: PICKER_PAGE_SIZE }),
   })
 
   const detailQuery = useQuery({
@@ -118,7 +128,9 @@ export function TicketsBoard() {
     enabled: panelMode === "view" && Boolean(activeTicket?.id),
   })
 
-  const tickets = listQuery.data ?? []
+  const tickets = listQuery.data?.items ?? []
+  const customers = customersQuery.data?.items ?? []
+  const teamMembers = teamQuery.data?.items ?? []
   const listError = listQuery.isError
     ? getApiErrorMessage(listQuery.error, "Unable to load tickets.")
     : null
@@ -349,7 +361,7 @@ export function TicketsBoard() {
             >
               <option value="">All assignees</option>
               <option value="unassigned">Unassigned</option>
-              {(teamQuery.data ?? []).map((member) => (
+              {(teamMembers).map((member) => (
                 <option key={member.id} value={member.id}>
                   {teamMemberDisplayName(member)}
                 </option>
@@ -369,6 +381,14 @@ export function TicketsBoard() {
         onEdit={openEdit}
         onDelete={openDelete}
         deletingId={deletingId}
+      />
+      <ListPagination
+        page={listQuery.data?.page ?? page}
+        pageSize={listQuery.data?.pageSize ?? DEFAULT_PAGE_SIZE}
+        total={listQuery.data?.total ?? 0}
+        hasNext={listQuery.data?.hasNext ?? false}
+        onPageChange={setPage}
+        itemLabel="tickets"
       />
 
       <Sheet
@@ -394,9 +414,9 @@ export function TicketsBoard() {
               onSubmit={handleCreate}
               onCancel={closePanel}
               submitLabel="Create ticket"
-              customers={customersQuery.data ?? []}
+              customers={customers}
               customersLoading={customersQuery.isLoading}
-              members={assignableMembers(teamQuery.data ?? [])}
+              members={assignableMembers(teamMembers)}
               membersLoading={teamQuery.isLoading}
               isSaving={isSaving}
               error={
@@ -418,10 +438,10 @@ export function TicketsBoard() {
               onSubmit={handleUpdate}
               onCancel={closePanel}
               submitLabel="Save changes"
-              customers={customersQuery.data ?? []}
+              customers={customers}
               customersLoading={customersQuery.isLoading}
               members={assignableMembers(
-                teamQuery.data ?? [],
+                teamMembers,
                 formValues.assignee_id,
               )}
               membersLoading={teamQuery.isLoading}
@@ -454,7 +474,7 @@ export function TicketsBoard() {
                 onEdit={() => openEdit(activeTicket)}
                 onClose={closePanel}
                 members={assignableMembers(
-                  teamQuery.data ?? [],
+                  teamMembers,
                   activeTicket.assignee_id,
                 )}
                 membersLoading={teamQuery.isLoading}

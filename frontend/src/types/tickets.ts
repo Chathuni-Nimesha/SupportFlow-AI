@@ -34,6 +34,7 @@ export type TicketAssigneeSummary = {
 export type Ticket = {
   id: string
   owner_id: string
+  workspace_id?: string
   customer_id: string
   title: string
   description: string
@@ -71,6 +72,8 @@ export type TicketListParams = {
   assigneeId?: string
   unassigned?: boolean
   customerId?: string
+  page?: number
+  pageSize?: number
 }
 
 export type TicketFormValues = {

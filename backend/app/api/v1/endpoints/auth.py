@@ -13,7 +13,7 @@ from app.schemas.auth import (
     UserRegisterRequest,
     UserResponse,
 )
-from app.services import auth_service
+from app.services import auth_service, workspace_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -38,7 +38,7 @@ async def login(request: Request, payload: UserLoginRequest) -> AuthTokenRespons
 async def me(
     current_user: Annotated[UserResponse, Depends(get_current_user)],
 ) -> UserResponse:
-    return current_user
+    return await workspace_service.build_user_response(current_user)
 
 
 @router.post("/logout", response_model=MessageResponse)

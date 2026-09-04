@@ -33,10 +33,15 @@ import type {
   KnowledgeDocumentFormValues,
 } from "@/types/knowledge"
 import { getApiErrorMessage } from "@/utils/api-error"
+import { useAuth } from "@/context/auth-provider"
+import { canManageKnowledge } from "@/lib/workspace-permissions"
 
 type PanelMode = "closed" | "create" | "edit" | "view" | "delete"
 
 export function KnowledgeBaseBoard() {
+  const { user, isLoading: isAuthLoading, currentWorkspace } = useAuth()
+  const canManage = !isAuthLoading && canManageKnowledge(user)
+  const workspaceId = currentWorkspace?.id ?? null
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([])
   const [search, setSearch] = useState("")
   const [listLoading, setListLoading] = useState(true)
@@ -61,8 +66,8 @@ export function KnowledgeBaseBoard() {
     setListLoading(true)
     setListError(null)
     try {
-      const data = await listKnowledgeDocuments()
-      setDocuments(data)
+      const page = await listKnowledgeDocuments({ page: 1, pageSize: 100 })
+      setDocuments(page.items ?? [])
     } catch (error) {
       setListError(
         getApiErrorMessage(error, "Unable to load knowledge documents."),
@@ -71,11 +76,14 @@ export function KnowledgeBaseBoard() {
     } finally {
       setListLoading(false)
     }
-  }, [])
+  }, [workspaceId])
 
   useEffect(() => {
+    setDocuments([])
+    setPanelMode("closed")
+    setActiveDocument(null)
     void loadDocuments()
-  }, [loadDocuments])
+  }, [loadDocuments, workspaceId])
 
   const filteredDocuments = useMemo(
     () => documents.filter((document) => matchesKnowledgeSearch(document, search)),
@@ -229,10 +237,12 @@ export function KnowledgeBaseBoard() {
             later.
           </p>
         </div>
-        <Button type="button" className="rounded-2xl" onClick={openCreate}>
-          <Plus className="size-4" />
-          New document
-        </Button>
+        {canManage ? (
+          <Button type="button" className="rounded-2xl" onClick={openCreate}>
+            <Plus className="size-4" />
+            New document
+          </Button>
+        ) : null}
       </div>
 
       <KnowledgeSemanticSearch />
@@ -263,6 +273,7 @@ export function KnowledgeBaseBoard() {
         onEdit={openEdit}
         onDelete={openDelete}
         deletingId={deletingId}
+        canManage={canManage}
       />
 
       <Sheet
@@ -332,6 +343,7 @@ export function KnowledgeBaseBoard() {
                 onIngest={() => void handleIngest(activeDocument)}
                 isIngesting={ingestingId === activeDocument.id}
                 ingestError={ingestError}
+                canManage={canManage}
               />
             )
           ) : null}

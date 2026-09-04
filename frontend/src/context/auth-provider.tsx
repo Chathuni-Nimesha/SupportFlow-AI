@@ -7,16 +7,25 @@ import {
   useState,
   type ReactNode,
 } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import { isAxiosError } from "axios"
 
+import {
+  currentWorkspace as resolveCurrentWorkspace,
+  currentWorkspaceRole as resolveCurrentWorkspaceRole,
+  type WorkspaceMemberRole,
+} from "@/lib/workspace-permissions"
+import { resetWorkspaceScopedQueries } from "@/lib/workspace-queries"
 import {
   fetchCurrentUser,
   loginUser,
   logoutUser,
   registerUser,
 } from "@/services/auth"
+import { selectWorkspace as selectWorkspaceRequest } from "@/services/workspaces"
 import type {
   AuthUser,
+  AuthWorkspaceSummary,
   LoginPayload,
   RegisterPayload,
 } from "@/types/auth"
@@ -28,10 +37,15 @@ type AuthContextValue = {
   token: string | null
   isAuthenticated: boolean
   isLoading: boolean
+  defaultWorkspaceId: string | null
+  workspaces: AuthWorkspaceSummary[]
+  currentWorkspace: AuthWorkspaceSummary | null
+  currentWorkspaceRole: WorkspaceMemberRole | null
   login: (payload: LoginPayload) => Promise<void>
   register: (payload: RegisterPayload) => Promise<void>
   logout: () => Promise<void>
   refreshUser: () => Promise<void>
+  selectWorkspace: (workspaceId: string) => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -49,6 +63,7 @@ function clearStoredSession() {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient()
   const [user, setUser] = useState<AuthUser | null>(null)
   const [token, setToken] = useState<string | null>(() => getStoredToken())
   const [isLoading, setIsLoading] = useState(true)
@@ -139,19 +154,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
   }, [])
 
-  const value = useMemo<AuthContextValue>(
-    () => ({
+  const selectWorkspace = useCallback(
+    async (workspaceId: string) => {
+      await selectWorkspaceRequest(workspaceId)
+      await refreshUser()
+      await resetWorkspaceScopedQueries(queryClient)
+    },
+    [queryClient, refreshUser],
+  )
+
+  const value = useMemo<AuthContextValue>(() => {
+    const currentWorkspace = resolveCurrentWorkspace(user)
+    return {
       user,
       token,
       isAuthenticated: Boolean(user && token),
       isLoading,
+      defaultWorkspaceId: user?.default_workspace_id ?? null,
+      workspaces: user?.workspaces ?? [],
+      currentWorkspace,
+      currentWorkspaceRole: resolveCurrentWorkspaceRole(user),
       login,
       register,
       logout,
       refreshUser,
-    }),
-    [user, token, isLoading, login, register, logout, refreshUser],
-  )
+      selectWorkspace,
+    }
+  }, [user, token, isLoading, login, register, logout, refreshUser, selectWorkspace])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

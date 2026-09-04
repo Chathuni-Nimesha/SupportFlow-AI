@@ -95,12 +95,12 @@ async def test_suggest_reply_calls_rag_with_latest_customer_message() -> None:
     ):
         result = await suggest_reply(
             conversation_id="conv-1",
-            owner_id="owner-a",
+            workspace_id="workspace-a",
             top_k=5,
         )
 
     rag_mock.assert_awaited_once_with(
-        owner_id="owner-a",
+        workspace_id="workspace-a",
         question="Can I get a refund?",
         top_k=5,
     )
@@ -129,7 +129,7 @@ async def test_suggest_reply_no_customer_message_skips_rag() -> None:
         with pytest.raises(ConversationAiValidationError):
             await suggest_reply(
                 conversation_id="conv-1",
-                owner_id="owner-a",
+                workspace_id="workspace-a",
                 top_k=5,
             )
 
@@ -207,6 +207,7 @@ async def test_suggest_endpoint_success(
             json={
                 "top_k": 4,
                 "owner_id": "should-be-ignored",
+                "workspace_id": "should-be-ignored",
             },
         )
 
@@ -219,8 +220,12 @@ async def test_suggest_endpoint_success(
     assert body["customer_message_id"] == latest_customer_id
     assert body["sources"][0]["document_id"] == "doc-1"
 
+    me = await client.get("/api/v1/auth/me", headers=auth_headers)
     kwargs = rag_mock.await_args.kwargs
-    assert kwargs["owner_id"] != "should-be-ignored"
+    assert kwargs["workspace_id"] == me.json()["default_workspace_id"]
+    assert kwargs["workspace_id"] != "should-be-ignored"
+    assert kwargs["workspace_id"] != me.json()["id"]
+    assert "owner_id" not in kwargs
     assert kwargs["question"] == "What is the refund window?"
     assert kwargs["top_k"] == 4
 

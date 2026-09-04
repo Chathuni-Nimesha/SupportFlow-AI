@@ -3,6 +3,16 @@ import "@testing-library/jest-dom/vitest"
 import { afterEach } from "vitest"
 import { cleanup } from "@testing-library/react"
 
+import { api } from "@/services/api"
+
+api.defaults.adapter = (config) => {
+  const method = (config.method ?? "get").toUpperCase()
+  const url = `${config.baseURL ?? ""}${config.url ?? ""}`
+  return Promise.reject(
+    new Error(`Unmocked API request in tests: ${method} ${url}`),
+  )
+}
+
 afterEach(() => {
   cleanup()
   localStorage.clear()

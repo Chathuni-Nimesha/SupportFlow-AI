@@ -2,7 +2,7 @@ import type { AiAnswer } from "@/types/ai"
 import type { Customer, CustomerDetail } from "@/types/customers"
 import type { TeamMember } from "@/types/team"
 import type { Ticket } from "@/types/tickets"
-import type { AuthTokenResponse, AuthUser } from "@/types/auth"
+import type { AuthTokenResponse, AuthUser, AuthWorkspaceSummary } from "@/types/auth"
 import type {
   Conversation,
   ConversationApi,
@@ -23,6 +23,73 @@ export const sampleUser: AuthUser = {
   email: "ava@acme.example",
   is_active: true,
   created_at: "2026-01-15T10:00:00.000Z",
+  default_workspace_id: "workspace-1",
+  workspaces: [
+    { id: "workspace-1", name: "Acme Support", role: "OWNER" },
+  ],
+}
+
+export function makeAuthUser(overrides: Partial<AuthUser> = {}): AuthUser {
+  return {
+    ...sampleUser,
+    workspaces: sampleUser.workspaces ? [...sampleUser.workspaces] : [],
+    ...overrides,
+  }
+}
+
+export function makeWorkspaceSummary(
+  overrides: Partial<AuthWorkspaceSummary> = {},
+): AuthWorkspaceSummary {
+  return {
+    id: "workspace-1",
+    name: "Acme Support",
+    role: "OWNER",
+    ...overrides,
+  }
+}
+
+export function makeAdminUser(overrides: Partial<AuthUser> = {}): AuthUser {
+  return makeAuthUser({
+    id: "user-admin",
+    first_name: "Maya",
+    last_name: "Admin",
+    email: "maya@acme.example",
+    workspaces: [makeWorkspaceSummary({ role: "ADMIN" })],
+    ...overrides,
+  })
+}
+
+export function makeAgentUser(overrides: Partial<AuthUser> = {}): AuthUser {
+  return makeAuthUser({
+    id: "user-agent",
+    first_name: "Sam",
+    last_name: "Agent",
+    email: "sam@acme.example",
+    workspaces: [makeWorkspaceSummary({ role: "AGENT" })],
+    ...overrides,
+  })
+}
+
+export function makeMultiWorkspaceUser(
+  active: "A" | "B" = "A",
+  overrides: Partial<AuthUser> = {},
+): AuthUser {
+  return makeAuthUser({
+    default_workspace_id: active === "B" ? "workspace-b" : "workspace-a",
+    workspaces: [
+      makeWorkspaceSummary({
+        id: "workspace-a",
+        name: "Workspace A",
+        role: "ADMIN",
+      }),
+      makeWorkspaceSummary({
+        id: "workspace-b",
+        name: "Workspace B",
+        role: "AGENT",
+      }),
+    ],
+    ...overrides,
+  })
 }
 
 export const sampleAuthToken: AuthTokenResponse = {
@@ -37,6 +104,7 @@ export function makeConversationApi(
   return {
     id: "conv-1",
     owner_id: "user-1",
+    workspace_id: "workspace-1",
     customer_name: "Elena Park",
     customer_email: "elena@acme.example",
     subject: "Refund request",
@@ -103,6 +171,7 @@ export function makeCustomer(overrides: Partial<Customer> = {}): Customer {
   return {
     id: "cust-1",
     owner_id: "user-1",
+    workspace_id: "workspace-1",
     first_name: "Elena",
     last_name: "Park",
     email: "elena@acme.example",
@@ -129,6 +198,7 @@ export function makeTicket(overrides: Partial<Ticket> = {}): Ticket {
   return {
     id: "tkt-1",
     owner_id: "user-1",
+    workspace_id: "workspace-1",
     customer_id: "cust-1",
     title: "Refund not received",
     description: "Customer paid twice and needs the duplicate charge reversed.",
@@ -152,6 +222,7 @@ export function makeTeamMember(overrides: Partial<TeamMember> = {}): TeamMember 
   return {
     id: "member-1",
     owner_id: "user-1",
+    workspace_id: "workspace-1",
     user_id: null,
     first_name: "Sarah",
     last_name: "Perera",
@@ -182,6 +253,7 @@ export function makeKnowledgeDocument(
   return {
     id: "doc-1",
     owner_id: "user-1",
+    workspace_id: "workspace-1",
     title: "Refund policy",
     content: "Customers may request a refund within 14 days of purchase.",
     source_type: "manual",
@@ -245,6 +317,24 @@ export const sampleGroundedAnswer: AiAnswer = {
   ],
   retrievedCount: 1,
   usedGeneration: true,
+}
+
+export function asPage<T>(
+  items: T[],
+  overrides: Partial<{
+    page: number
+    pageSize: number
+    total: number
+    hasNext: boolean
+  }> = {},
+) {
+  return {
+    items,
+    page: overrides.page ?? 1,
+    pageSize: overrides.pageSize ?? 20,
+    total: overrides.total ?? items.length,
+    hasNext: overrides.hasNext ?? false,
+  }
 }
 
 export const sampleNoKnowledgeAnswer: AiAnswer = {
