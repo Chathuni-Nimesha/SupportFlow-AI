@@ -83,6 +83,7 @@ def _upsert_document_chunks_sync(document: dict[str, Any]) -> int:
         return 0
 
     ids = [build_chunk_id(document_id, index) for index in range(len(chunks))]
+    # owner_id is compatibility metadata only. Retrieval filters on workspace_id.
     metadatas = [
         {
             "document_id": document_id,

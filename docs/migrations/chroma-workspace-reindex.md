@@ -17,7 +17,9 @@ $and: [{ workspace_id: current_workspace.id }, { status: "Published" }]
 ```
 
 Chunks without `workspace_id` are **not** returned. That is intentional: the
-query never searches all tenants.
+query never searches all tenants. Existing `owner_id` metadata is left on
+chunks and still written on new ingest for compatibility; it is not a
+retrieval filter.
 
 ## Prerequisites
 

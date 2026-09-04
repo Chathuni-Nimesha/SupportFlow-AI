@@ -61,14 +61,11 @@ async def ensure_indexes() -> None:
     await db[CUSTOMERS_COLLECTION].create_index(
         [("owner_id", 1), ("updated_at", -1)],
     )
-    await db[CUSTOMERS_COLLECTION].create_index(
-        [("owner_id", 1), ("email", 1)],
-        unique=True,
-    )
-    # Phase 1D-1: customer tenancy is workspace_id. Keep the owner_id unique
-    # index so already-backfilled databases stay valid until a later drop.
-    # Temporary: unique (owner_id, email) can block the same creator from
-    # storing the same email in two workspaces. Do not drop yet.
+    # Unique (owner_id, email) is obsolete and incorrect for multi-workspace
+    # data. Do not recreate it. Drop leftovers with
+    # ``python -m scripts.cleanup_owner_id`` (never on startup).
+    # Phase 1D-1: customer tenancy is workspace_id. Keep the non-unique
+    # owner_id list index until a later drop.
     await db[CUSTOMERS_COLLECTION].create_index(
         [("workspace_id", 1), ("updated_at", -1)],
     )
@@ -111,13 +108,11 @@ async def ensure_indexes() -> None:
     await db[TEAM_MEMBERS_COLLECTION].create_index(
         [("owner_id", 1), ("updated_at", -1)],
     )
-    await db[TEAM_MEMBERS_COLLECTION].create_index(
-        [("owner_id", 1), ("email", 1)],
-        unique=True,
-    )
-    # Temporary: unique (owner_id, email) is retained for compatibility.
-    # Membership uniqueness for current tenancy is (workspace_id, email) and
-    # (workspace_id, user_id). Do not drop the owner unique index yet.
+    # Unique (owner_id, email) is obsolete and can block the same email in
+    # two workspaces for one creator. Do not recreate it. Drop leftovers
+    # with ``python -m scripts.cleanup_owner_id`` (never on startup).
+    # Membership uniqueness is (workspace_id, email) and (workspace_id, user_id).
+    # Keep remaining owner_id indexes for OWNER membership repair lookups.
     await db[TEAM_MEMBERS_COLLECTION].create_index(
         [("owner_id", 1), ("role", 1)],
     )

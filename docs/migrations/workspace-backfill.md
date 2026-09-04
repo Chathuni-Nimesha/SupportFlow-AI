@@ -3,6 +3,10 @@
 Additive MongoDB migration. It prepares existing `owner_id`-scoped data for
 workspaces. It does **not** change application runtime.
 
+**Status after Phase 1D–1I:** live queries use `workspace_id` from
+`get_current_workspace`. This script still *finds* unstamped documents by
+`owner_id`. That is a migration lookup, not the runtime tenant boundary.
+
 ## Purpose
 
 For every existing user, ensure exactly one personal workspace

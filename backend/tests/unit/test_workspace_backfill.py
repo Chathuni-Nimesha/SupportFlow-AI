@@ -1,4 +1,4 @@
-"""Phase 1B workspace backfill tests. Runtime isolation still uses owner_id."""
+"""Phase 1B workspace backfill tests. Runtime isolation uses workspace_id."""
 
 from collections.abc import AsyncIterator
 from copy import deepcopy
