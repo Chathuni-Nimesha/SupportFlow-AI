@@ -89,6 +89,17 @@ export function TicketDetailPanel({
               <dd className="text-sm font-medium text-foreground">
                 {conversationLabel}
               </dd>
+              {ticket.conversation_id?.trim() ? (
+                <dd>
+                  <Button variant="link" className="h-auto px-0 text-xs" asChild>
+                    <Link
+                      to={`/dashboard/conversations?conversation=${encodeURIComponent(ticket.conversation_id)}`}
+                    >
+                      Open conversation
+                    </Link>
+                  </Button>
+                </dd>
+              ) : null}
             </div>
           </dl>
 

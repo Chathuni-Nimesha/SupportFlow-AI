@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { PanelRightOpen, SlidersHorizontal } from "lucide-react"
+import { useSearchParams } from "react-router-dom"
 
 import { AiAssistantPanel } from "@/components/conversations/ai-assistant-panel"
 import { ConversationDetail } from "@/components/conversations/conversation-detail"
@@ -13,13 +14,17 @@ import {
   validateNewConversationValues,
   type NewConversationFormValues,
 } from "@/components/conversations/new-conversation-form"
+import { TicketForm } from "@/components/tickets/ticket-form"
 import { conversationFilterDefs } from "@/data/conversations"
 import type {
   Conversation,
+  ConversationApi,
   ConversationFilter,
   ConversationStatus,
 } from "@/types/conversations"
 import type { Customer } from "@/types/customers"
+import type { TeamMember } from "@/types/team"
+import type { Ticket, TicketFormValues } from "@/types/tickets"
 import { PICKER_PAGE_SIZE } from "@/types/pagination"
 import {
   formatRelativeTime,
@@ -29,6 +34,12 @@ import {
   statusToFilterTags,
 } from "@/lib/conversation-mappers"
 import {
+  emptyTicketFormValues,
+  ticketFormFromConversation,
+  toCreatePayload,
+  validateTicketForm,
+} from "@/lib/ticket-mappers"
+import {
   createConversation,
   getConversation,
   listConversationMessages,
@@ -37,6 +48,8 @@ import {
   updateConversation,
 } from "@/services/conversations"
 import { listCustomers } from "@/services/customers"
+import { createTicket, listTickets } from "@/services/tickets"
+import { listTeamMembers } from "@/services/team"
 import { Button } from "@/components/ui/button"
 import {
   Sheet,
@@ -91,6 +104,8 @@ function buildFilterCounts(
 export function ConversationsInbox() {
   const { currentWorkspace } = useAuth()
   const workspaceId = currentWorkspace?.id ?? null
+  const [searchParams] = useSearchParams()
+  const requestedConversationId = searchParams.get("conversation")?.trim() || null
   const [filter, setFilter] = useState<ConversationFilter>("inbox")
   const [search, setSearch] = useState("")
   const [items, setItems] = useState<Conversation[]>([])
@@ -100,7 +115,7 @@ export function ConversationsInbox() {
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [aiOpen, setAiOpen] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
-  const [escalated, setEscalated] = useState(false)
+  const [ticketCreateOpen, setTicketCreateOpen] = useState(false)
 
   const [listLoading, setListLoading] = useState(true)
   const [listError, setListError] = useState<string | null>(null)
@@ -116,6 +131,16 @@ export function ConversationsInbox() {
   const [isCreating, setIsCreating] = useState(false)
   const [customers, setCustomers] = useState<Customer[]>([])
   const [customersLoading, setCustomersLoading] = useState(false)
+  const [members, setMembers] = useState<TeamMember[]>([])
+  const [membersLoading, setMembersLoading] = useState(false)
+  const [linkedTickets, setLinkedTickets] = useState<Ticket[]>([])
+  const [linkedTicketsLoading, setLinkedTicketsLoading] = useState(false)
+  const [linkedTicketsError, setLinkedTicketsError] = useState<string | null>(null)
+  const [ticketValues, setTicketValues] = useState<TicketFormValues>(
+    emptyTicketFormValues(),
+  )
+  const [ticketError, setTicketError] = useState<string | null>(null)
+  const [isCreatingTicket, setIsCreatingTicket] = useState(false)
 
   const filtered = useMemo(
     () => filterConversations(items, filter, search),
@@ -137,6 +162,12 @@ export function ConversationsInbox() {
       const mapped = page.items.map((item) => mapConversationFromApi(item))
       setItems(mapped)
       setActiveId((current) => {
+        if (
+          requestedConversationId &&
+          mapped.some((item) => item.id === requestedConversationId)
+        ) {
+          return requestedConversationId
+        }
         if (current && mapped.some((item) => item.id === current)) {
           return current
         }
@@ -151,10 +182,10 @@ export function ConversationsInbox() {
     } finally {
       setListLoading(false)
     }
-  }, [workspaceId])
+  }, [workspaceId, requestedConversationId])
 
   useEffect(() => {
-    if (!createOpen) return
+    if (!createOpen && !ticketCreateOpen) return
 
     let cancelled = false
     setCustomersLoading(true)
@@ -172,7 +203,65 @@ export function ConversationsInbox() {
     return () => {
       cancelled = true
     }
-  }, [createOpen, workspaceId])
+  }, [createOpen, ticketCreateOpen, workspaceId])
+
+  useEffect(() => {
+    if (!ticketCreateOpen) return
+
+    let cancelled = false
+    setMembersLoading(true)
+    void listTeamMembers({ page: 1, pageSize: PICKER_PAGE_SIZE })
+      .then((page) => {
+        if (!cancelled) {
+          setMembers(page.items.filter((member) => member.status === "ACTIVE"))
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setMembers([])
+      })
+      .finally(() => {
+        if (!cancelled) setMembersLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [ticketCreateOpen, workspaceId])
+
+  useEffect(() => {
+    if (!activeId) {
+      setLinkedTickets([])
+      setLinkedTicketsError(null)
+      return
+    }
+
+    let cancelled = false
+    setLinkedTicketsLoading(true)
+    setLinkedTicketsError(null)
+    void listTickets({
+      conversationId: activeId,
+      page: 1,
+      pageSize: PICKER_PAGE_SIZE,
+    })
+      .then((page) => {
+        if (!cancelled) setLinkedTickets(page.items)
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setLinkedTickets([])
+          setLinkedTicketsError(
+            getApiErrorMessage(error, "Unable to load linked tickets."),
+          )
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLinkedTicketsLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeId, workspaceId])
 
   useEffect(() => {
     setItems([])
@@ -240,7 +329,6 @@ export function ConversationsInbox() {
   const selectConversation = (id: string) => {
     setActiveId(id)
     setDraft("")
-    setEscalated(false)
     setSendError(null)
     setMobileView("detail")
   }
@@ -352,6 +440,63 @@ export function ConversationsInbox() {
     }
   }
 
+  const openTicketCreate = () => {
+    if (!activeConversation) return
+    setTicketValues(ticketFormFromConversation(activeConversation))
+    setTicketError(null)
+    setTicketCreateOpen(true)
+  }
+
+  const closeTicketCreate = () => {
+    if (isCreatingTicket) return
+    setTicketCreateOpen(false)
+    setTicketError(null)
+    setTicketValues(emptyTicketFormValues())
+  }
+
+  const handleCreateTicket = async () => {
+    const validationError = validateTicketForm(ticketValues)
+    if (validationError) {
+      setTicketError(validationError)
+      return
+    }
+    setIsCreatingTicket(true)
+    setTicketError(null)
+    try {
+      const created = await createTicket(toCreatePayload(ticketValues))
+      setLinkedTickets((current) => [
+        created,
+        ...current.filter((item) => item.id !== created.id),
+      ])
+      setTicketCreateOpen(false)
+      setTicketValues(emptyTicketFormValues())
+    } catch (error) {
+      setTicketError(getApiErrorMessage(error, "Unable to create ticket."))
+    } finally {
+      setIsCreatingTicket(false)
+    }
+  }
+
+  const ticketConversationOptions: ConversationApi[] = activeConversation
+    ? [
+        {
+          id: activeConversation.id,
+          owner_id: "",
+          customer_id: activeConversation.customerId ?? null,
+          customer_name: activeConversation.customerName,
+          customer_email: activeConversation.customerEmail,
+          subject: activeConversation.subject,
+          status: activeConversation.status,
+          channel: activeConversation.channel,
+          assigned_agent_id: null,
+          unread_count: activeConversation.unread,
+          last_message: activeConversation.lastMessage,
+          created_at: activeConversation.updatedAt,
+          updated_at: activeConversation.updatedAt,
+        },
+      ]
+    : []
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center gap-2 border-b border-border/70 bg-card px-3 py-2 2xl:hidden">
@@ -377,12 +522,6 @@ export function ConversationsInbox() {
           AI panel
         </Button>
       </div>
-
-      {escalated ? (
-        <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-xs font-medium text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
-          Escalation noted (UI only) — a human agent would be notified next.
-        </div>
-      ) : null}
 
       {listError ? (
         <div className="flex items-center justify-between gap-3 border-b border-rose-200 bg-rose-50 px-4 py-2 text-xs text-rose-800 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-200">
@@ -455,6 +594,12 @@ export function ConversationsInbox() {
                 sendError={sendError}
                 isSending={sending}
                 isUpdatingStatus={updatingStatus}
+                linkedTickets={linkedTickets}
+                linkedTicketsLoading={linkedTicketsLoading}
+                linkedTicketsError={linkedTicketsError}
+                onCreateTicket={
+                  activeConversation ? openTicketCreate : undefined
+                }
                 className="h-full"
               />
             </motion.div>
@@ -465,7 +610,7 @@ export function ConversationsInbox() {
           <AiAssistantPanel
             conversation={activeConversation}
             onUseSuggestion={setDraft}
-            onEscalate={() => setEscalated(true)}
+            onEscalate={openTicketCreate}
             className="h-full"
           />
         </div>
@@ -530,10 +675,44 @@ export function ConversationsInbox() {
               setAiOpen(false)
             }}
             onEscalate={() => {
-              setEscalated(true)
+              openTicketCreate()
               setAiOpen(false)
             }}
             className="h-full"
+          />
+        </SheetContent>
+      </Sheet>
+
+      <Sheet
+        open={ticketCreateOpen}
+        onOpenChange={(open) => {
+          if (!open && !isCreatingTicket) {
+            closeTicketCreate()
+          }
+        }}
+      >
+        <SheetContent
+          side="right"
+          className="flex w-full flex-col gap-0 p-0 sm:max-w-xl"
+        >
+          <SheetHeader className="border-b border-border/70 px-4 py-4 text-left">
+            <SheetTitle>Create ticket</SheetTitle>
+          </SheetHeader>
+          <TicketForm
+            values={ticketValues}
+            onChange={setTicketValues}
+            onSubmit={() => void handleCreateTicket()}
+            onCancel={closeTicketCreate}
+            submitLabel="Create ticket"
+            customers={customers}
+            customersLoading={customersLoading}
+            conversations={ticketConversationOptions}
+            members={members}
+            membersLoading={membersLoading}
+            isSaving={isCreatingTicket}
+            error={ticketError}
+            lockCustomer={Boolean(activeConversation?.customerId)}
+            lockConversation
           />
         </SheetContent>
       </Sheet>

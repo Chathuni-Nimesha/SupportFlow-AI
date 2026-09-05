@@ -97,6 +97,7 @@ export type ConversationAiSuggestRequest = {
 /** View-model used by existing Conversations UI components */
 export type Conversation = {
   id: string
+  customerId?: string | null
   customerName: string
   customerEmail: string
   initials: string

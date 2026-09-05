@@ -75,6 +75,7 @@ export type TicketListParams = {
   assigneeId?: string
   unassigned?: boolean
   customerId?: string
+  conversationId?: string
   page?: number
   pageSize?: number
 }

@@ -54,6 +54,21 @@ export function emptyTicketFormValues(): TicketFormValues {
   }
 }
 
+export function ticketFormFromConversation(conversation: {
+  id: string
+  customerId?: string | null
+  subject: string
+  lastMessage?: string
+}): TicketFormValues {
+  return {
+    ...emptyTicketFormValues(),
+    customer_id: conversation.customerId?.trim() || "",
+    conversation_id: conversation.id,
+    title: conversation.subject.trim(),
+    description: (conversation.lastMessage || conversation.subject).trim(),
+  }
+}
+
 export function formValuesFromTicket(ticket: Ticket): TicketFormValues {
   return {
     customer_id: ticket.customer_id,

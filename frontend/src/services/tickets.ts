@@ -24,6 +24,7 @@ export async function listTickets(
       assignee_id: params.assigneeId || undefined,
       unassigned: params.unassigned || undefined,
       customer_id: params.customerId || undefined,
+      conversation_id: params.conversationId || undefined,
       page: params.page ?? 1,
       page_size: params.pageSize ?? DEFAULT_PAGE_SIZE,
     },

@@ -12,7 +12,10 @@ import {
   updateConversation,
 } from "@/services/conversations"
 import { listCustomers } from "@/services/customers"
-import { makeAgentUser, makeConversationApi, makeMessageApi,
+import { createTicket, listTickets } from "@/services/tickets"
+import { listTeamMembers } from "@/services/team"
+import { makeAgentUser, makeConversationApi, makeCustomer, makeMessageApi,
+  makeTicket,
   asPage,
 } from "@/test/fixtures"
 import { deferred, renderWithProviders } from "@/test/test-utils"
@@ -43,6 +46,18 @@ vi.mock("@/services/customers", () => ({
   listCustomers: vi.fn(),
 }))
 
+vi.mock("@/services/tickets", () => ({
+  listTickets: vi.fn(),
+  createTicket: vi.fn(),
+  getTicket: vi.fn(),
+  updateTicket: vi.fn(),
+  deleteTicket: vi.fn(),
+}))
+
+vi.mock("@/services/team", () => ({
+  listTeamMembers: vi.fn(),
+}))
+
 async function fillNewConversationForm(user: UserEvent) {
   const dialog = await screen.findByRole("dialog")
   const fill = async (label: string, value: string) => {
@@ -64,6 +79,11 @@ describe("ConversationsInbox", () => {
   beforeEach(() => {
     vi.mocked(listCustomers).mockReset()
     vi.mocked(listCustomers).mockResolvedValue(asPage([]))
+    vi.mocked(listTickets).mockReset()
+    vi.mocked(listTickets).mockResolvedValue(asPage([]))
+    vi.mocked(createTicket).mockReset()
+    vi.mocked(listTeamMembers).mockReset()
+    vi.mocked(listTeamMembers).mockResolvedValue(asPage([]))
   })
   it("shows a loading state while conversations are fetched", async () => {
     const pending = deferred<ReturnType<typeof asPage<ReturnType<typeof makeConversationApi>>>>()
@@ -451,5 +471,98 @@ describe("ConversationsInbox", () => {
 
     expect(await screen.findByText("Elena Park")).toBeInTheDocument()
     expect(screen.getByRole("button", { name: /New/ })).toBeInTheDocument()
+  })
+
+  it("shows linked tickets for the active conversation", async () => {
+    const conversation = makeConversationApi()
+    vi.mocked(listConversations).mockResolvedValue(asPage([conversation]))
+    vi.mocked(getConversation).mockResolvedValue(conversation)
+    vi.mocked(listConversationMessages).mockResolvedValue([makeMessageApi()])
+    vi.mocked(listTickets).mockResolvedValue(
+      asPage([makeTicket({ title: "Refund not received" })]),
+    )
+
+    renderWithProviders(<ConversationsInbox />)
+
+    expect(await screen.findByText("Linked tickets")).toBeInTheDocument()
+    expect(await screen.findByText("Refund not received")).toBeInTheDocument()
+    await waitFor(() => {
+      expect(listTickets).toHaveBeenCalledWith(
+        expect.objectContaining({ conversationId: "conv-1" }),
+      )
+    })
+  })
+
+  it("creates a ticket from a conversation without auto-duplicating", async () => {
+    const user = userEvent.setup()
+    const conversation = makeConversationApi({ customer_id: "cust-1" })
+    vi.mocked(listConversations).mockResolvedValue(asPage([conversation]))
+    vi.mocked(getConversation).mockResolvedValue(conversation)
+    vi.mocked(listConversationMessages).mockResolvedValue([makeMessageApi()])
+    vi.mocked(listCustomers).mockResolvedValue(asPage([makeCustomer()]))
+    vi.mocked(createTicket).mockResolvedValue(
+      makeTicket({ conversation_id: conversation.id }),
+    )
+
+    renderWithProviders(<ConversationsInbox />)
+    await user.click(await screen.findByRole("button", { name: "Create ticket" }))
+
+    const dialog = await screen.findByRole("dialog")
+    expect(
+      within(dialog).getByRole("heading", { name: "Create ticket" }),
+    ).toBeInTheDocument()
+    expect(within(dialog).getByLabelText("Customer")).toHaveValue("cust-1")
+    expect(within(dialog).getByLabelText("Customer")).toBeDisabled()
+    expect(
+      within(dialog).getByLabelText("Conversation (optional)"),
+    ).toHaveValue(conversation.id)
+    expect(
+      within(dialog).getByLabelText("Conversation (optional)"),
+    ).toBeDisabled()
+
+    await user.click(
+      within(dialog).getByRole("button", { name: "Create ticket" }),
+    )
+
+    await waitFor(() => {
+      expect(createTicket).toHaveBeenCalledTimes(1)
+    })
+    const payload = vi.mocked(createTicket).mock.calls[0][0]
+    expect(payload).toMatchObject({
+      customer_id: "cust-1",
+      conversation_id: "conv-1",
+      title: "Refund request",
+    })
+    expect(payload).not.toHaveProperty("workspace_id")
+  }, 10_000)
+
+  it("selects a conversation from the workspace-safe query param", async () => {
+    const first = makeConversationApi()
+    const second = makeConversationApi({
+      id: "conv-2",
+      customer_name: "Noah Diaz",
+      customer_email: "noah@acme.example",
+      last_message: "Shipping is delayed",
+      subject: "Shipping delay",
+    })
+    vi.mocked(listConversations).mockResolvedValue(asPage([first, second]))
+    vi.mocked(getConversation).mockImplementation(async (id) =>
+      id === "conv-2" ? second : first,
+    )
+    vi.mocked(listConversationMessages).mockResolvedValue([makeMessageApi()])
+
+    renderWithProviders(<ConversationsInbox />, {
+      initialEntries: ["/dashboard/conversations?conversation=conv-2"],
+    })
+
+    expect(
+      await screen.findByRole("heading", { name: "Noah Diaz" }),
+    ).toBeInTheDocument()
+    await waitFor(() => {
+      expect(getConversation).toHaveBeenCalledWith("conv-2")
+      expect(listTickets).toHaveBeenCalledWith(
+        expect.objectContaining({ conversationId: "conv-2" }),
+      )
+    })
   })
 })

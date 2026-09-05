@@ -83,6 +83,7 @@ export function mapConversationFromApi(
 ): Conversation {
   return {
     id: conversation.id,
+    customerId: conversation.customer_id?.trim() || null,
     customerName: conversation.customer_name,
     customerEmail: conversation.customer_email,
     initials: initialsFromName(conversation.customer_name),

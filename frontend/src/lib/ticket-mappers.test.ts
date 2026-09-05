@@ -5,6 +5,7 @@ import {
   emptyTicketFormValues,
   ticketConversationLabel,
   ticketCustomerName,
+  ticketFormFromConversation,
   toCreatePayload,
   toUpdatePayload,
   validateTicketForm,
@@ -147,5 +148,28 @@ describe("ticket mappers", () => {
     expect(
       ticketConversationLabel(makeTicket({ conversation_id: "conv-1" })),
     ).toBe("Linked · conv-1")
+  })
+
+  it("prefills a ticket form from a conversation without inventing a customer", () => {
+    expect(
+      ticketFormFromConversation({
+        id: "conv-1",
+        subject: "Refund request",
+        lastMessage: "Can I request a refund?",
+      }),
+    ).toMatchObject({
+      customer_id: "",
+      conversation_id: "conv-1",
+      title: "Refund request",
+      description: "Can I request a refund?",
+    })
+    expect(
+      ticketFormFromConversation({
+        id: "conv-1",
+        customerId: "cust-1",
+        subject: "Refund request",
+        lastMessage: "Can I request a refund?",
+      }).customer_id,
+    ).toBe("cust-1")
   })
 })

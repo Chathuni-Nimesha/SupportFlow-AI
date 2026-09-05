@@ -268,6 +268,7 @@ async def list_tickets(
     assignee_id: str | None = None,
     unassigned: bool = False,
     customer_id: str | None = None,
+    conversation_id: str | None = None,
     page: int = 1,
     page_size: int = 20,
 ) -> dict[str, Any]:
@@ -287,6 +288,9 @@ async def list_tickets(
         filters["priority"] = priority_filter
     if customer_id:
         filters["customer_id"] = customer_id
+    cleaned_conversation_id = _optional_id(conversation_id)
+    if cleaned_conversation_id:
+        filters["conversation_id"] = cleaned_conversation_id
     if unassigned:
         filters["assignee_id"] = None
     elif assignee_id:

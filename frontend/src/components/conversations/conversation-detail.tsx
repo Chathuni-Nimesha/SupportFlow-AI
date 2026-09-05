@@ -1,4 +1,5 @@
 import { ArrowLeft, Loader2 } from "lucide-react"
+import { Link } from "react-router-dom"
 
 import { MessageBubble } from "@/components/conversations/message-bubble"
 import { ReplyComposer } from "@/components/conversations/reply-composer"
@@ -7,6 +8,11 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import {
+  TICKET_PRIORITY_LABELS,
+  TICKET_STATUS_LABELS,
+} from "@/lib/ticket-mappers"
+import type { Ticket } from "@/types/tickets"
 import { cn } from "@/lib/utils"
 
 const STATUS_OPTIONS: ConversationStatus[] = [
@@ -28,6 +34,10 @@ type ConversationDetailProps = {
   sendError?: string | null
   isSending?: boolean
   isUpdatingStatus?: boolean
+  linkedTickets?: Ticket[]
+  linkedTicketsLoading?: boolean
+  linkedTicketsError?: string | null
+  onCreateTicket?: () => void
   className?: string
 }
 
@@ -43,6 +53,10 @@ export function ConversationDetail({
   sendError = null,
   isSending = false,
   isUpdatingStatus = false,
+  linkedTickets = [],
+  linkedTicketsLoading = false,
+  linkedTicketsError = null,
+  onCreateTicket,
   className,
 }: ConversationDetailProps) {
   if (!conversation) {
@@ -122,6 +136,62 @@ export function ConversationDetail({
 
       <ScrollArea className="flex-1">
         <div className="space-y-4 px-4 py-5">
+          {onCreateTicket ? (
+            <div className="rounded-2xl border border-border/80 bg-card px-3.5 py-3 shadow-soft">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                    Linked tickets
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Tickets in this workspace that already point at this
+                    conversation.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="rounded-xl"
+                  onClick={onCreateTicket}
+                >
+                  Create ticket
+                </Button>
+              </div>
+              {linkedTicketsLoading ? (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Loading tickets…
+                </p>
+              ) : linkedTicketsError ? (
+                <p className="mt-3 text-xs text-rose-700 dark:text-rose-300">
+                  {linkedTicketsError}
+                </p>
+              ) : linkedTickets.length === 0 ? (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  No linked tickets yet. Creating one will not invent older
+                  relationships.
+                </p>
+              ) : (
+                <ul className="mt-3 space-y-2">
+                  {linkedTickets.map((ticket) => (
+                    <li key={ticket.id}>
+                      <Link
+                        to={`/dashboard/tickets`}
+                        className="block rounded-xl border border-border/70 bg-background px-3 py-2 hover:bg-muted/40"
+                      >
+                        <p className="text-sm font-medium text-foreground">
+                          {ticket.title}
+                        </p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {TICKET_STATUS_LABELS[ticket.status]} ·{" "}
+                          {TICKET_PRIORITY_LABELS[ticket.priority]}
+                        </p>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ) : null}
           {isMessagesLoading ? (
             <div className="flex flex-col items-center justify-center gap-2 py-16 text-muted-foreground">
               <Loader2 className="size-5 animate-spin" />
