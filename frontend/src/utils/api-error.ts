@@ -14,7 +14,7 @@ export function getApiErrorMessage(
     if (Array.isArray(detail) && detail.length > 0) {
       const first = detail[0]
       if (typeof first?.msg === "string") {
-        return first.msg
+        return first.msg.replace(/^Value error,\s*/i, "")
       }
     }
 

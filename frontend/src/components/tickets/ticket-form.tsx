@@ -11,6 +11,7 @@ import {
   TICKET_STATUS_LABELS,
 } from "@/lib/ticket-mappers"
 import type { Customer } from "@/types/customers"
+import type { ConversationApi } from "@/types/conversations"
 import type { TeamMember } from "@/types/team"
 import {
   TICKET_PRIORITIES,
@@ -31,6 +32,8 @@ type TicketFormProps = {
   submitLabel: string
   customers: Customer[]
   customersLoading?: boolean
+  conversations?: ConversationApi[]
+  conversationsLoading?: boolean
   members: TeamMember[]
   membersLoading?: boolean
   isSaving?: boolean
@@ -46,6 +49,8 @@ export function TicketForm({
   submitLabel,
   customers,
   customersLoading = false,
+  conversations = [],
+  conversationsLoading = false,
   members,
   membersLoading = false,
   isSaving = false,
@@ -57,6 +62,27 @@ export function TicketForm({
     value: TicketFormValues[K],
   ) => {
     onChange({ ...values, [key]: value })
+  }
+
+  const selectConversation = (conversationId: string) => {
+    if (!conversationId) {
+      onChange({ ...values, conversation_id: "" })
+      return
+    }
+    const conversation = conversations.find((item) => item.id === conversationId)
+    const next: TicketFormValues = {
+      ...values,
+      conversation_id: conversationId,
+    }
+    const linkedCustomerId = conversation?.customer_id?.trim()
+    if (
+      linkedCustomerId &&
+      !lockCustomer &&
+      customers.some((customer) => customer.id === linkedCustomerId)
+    ) {
+      next.customer_id = linkedCustomerId
+    }
+    onChange(next)
   }
 
   return (
@@ -100,6 +126,36 @@ export function TicketForm({
               Create a customer before opening a ticket.
             </p>
           ) : null}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="ticket-conversation">Conversation (optional)</Label>
+          <select
+            id="ticket-conversation"
+            value={values.conversation_id}
+            onChange={(event) => selectConversation(event.target.value)}
+            className={selectClassName}
+            disabled={isSaving || conversationsLoading}
+          >
+            <option value="">
+              {conversationsLoading
+                ? "Loading conversations…"
+                : "No linked conversation"}
+            </option>
+            {values.conversation_id &&
+            !conversations.some(
+              (conversation) => conversation.id === values.conversation_id,
+            ) ? (
+              <option value={values.conversation_id}>
+                Linked conversation
+              </option>
+            ) : null}
+            {conversations.map((conversation) => (
+              <option key={conversation.id} value={conversation.id}>
+                {conversation.subject} · {conversation.customer_name}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="space-y-2">

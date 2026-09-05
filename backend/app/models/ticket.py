@@ -29,6 +29,25 @@ def utc_now() -> datetime:
     return datetime.now(UTC)
 
 
+def normalize_optional_conversation_id(conversation_id: str | None) -> str | None:
+    """Return a stripped conversation id, or None when missing or blank."""
+    if conversation_id is None:
+        return None
+    cleaned = str(conversation_id).strip()
+    return cleaned or None
+
+
+def apply_optional_conversation_id(
+    document: dict[str, Any],
+    conversation_id: str | None,
+) -> dict[str, Any]:
+    """Attach conversation_id only when a non-empty value is provided."""
+    cleaned = normalize_optional_conversation_id(conversation_id)
+    if cleaned is not None:
+        document["conversation_id"] = cleaned
+    return document
+
+
 def build_ticket_document(
     *,
     owner_id: str,
@@ -39,6 +58,7 @@ def build_ticket_document(
     priority: str = "MEDIUM",
     assignee_id: str | None = None,
     workspace_id: str | None = None,
+    conversation_id: str | None = None,
 ) -> dict[str, Any]:
     """Create a new ticket document ready for insertion."""
     now = utc_now()
@@ -54,7 +74,8 @@ def build_ticket_document(
         "created_at": now,
         "updated_at": now,
     }
-    return apply_optional_workspace_id(document, workspace_id)
+    apply_optional_workspace_id(document, workspace_id)
+    return apply_optional_conversation_id(document, conversation_id)
 
 
 def serialize_ticket(
@@ -67,7 +88,10 @@ def serialize_ticket(
     payload = {
         "id": str(document["_id"]),
         "owner_id": document["owner_id"],
-        "customer_id": document["customer_id"],
+        "customer_id": document.get("customer_id"),
+        "conversation_id": normalize_optional_conversation_id(
+            document.get("conversation_id"),
+        ),
         "title": document["title"],
         "description": document["description"],
         "status": document["status"],

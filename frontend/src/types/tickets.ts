@@ -36,6 +36,7 @@ export type Ticket = {
   owner_id: string
   workspace_id?: string
   customer_id: string
+  conversation_id?: string | null
   title: string
   description: string
   status: TicketStatus
@@ -54,6 +55,7 @@ export type TicketCreatePayload = {
   status?: TicketStatus
   priority?: TicketPriority
   assignee_id?: string | null
+  conversation_id?: string | null
 }
 
 export type TicketUpdatePayload = {
@@ -63,6 +65,7 @@ export type TicketUpdatePayload = {
   status?: TicketStatus
   priority?: TicketPriority
   assignee_id?: string | null
+  conversation_id?: string | null
 }
 
 export type TicketListParams = {
@@ -78,6 +81,7 @@ export type TicketListParams = {
 
 export type TicketFormValues = {
   customer_id: string
+  conversation_id: string
   title: string
   description: string
   status: TicketStatus

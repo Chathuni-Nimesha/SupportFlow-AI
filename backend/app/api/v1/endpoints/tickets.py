@@ -10,10 +10,10 @@ from app.schemas.auth import UserResponse
 from app.schemas.pagination import PaginatedResponse
 from app.schemas.ticket import (
     TicketCreateRequest,
-    TicketPriority,
     TicketResponse,
-    TicketStatus,
     TicketUpdateRequest,
+    ValidatedTicketPriority,
+    ValidatedTicketStatus,
 )
 from app.services import ticket_service
 from app.services.workspace_service import WorkspaceContext
@@ -30,11 +30,11 @@ async def list_tickets(
         Query(max_length=200, description="Search title or description"),
     ] = None,
     ticket_status: Annotated[
-        TicketStatus | None,
+        ValidatedTicketStatus | None,
         Query(alias="status", description="Filter by ticket status"),
     ] = None,
     priority: Annotated[
-        TicketPriority | None,
+        ValidatedTicketPriority | None,
         Query(description="Filter by ticket priority"),
     ] = None,
     assignee_id: Annotated[

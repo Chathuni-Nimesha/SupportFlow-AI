@@ -3,10 +3,13 @@ import { describe, expect, it } from "vitest"
 import {
   assigneeLabel,
   emptyTicketFormValues,
+  ticketConversationLabel,
   ticketCustomerName,
   toCreatePayload,
+  toUpdatePayload,
   validateTicketForm,
 } from "@/lib/ticket-mappers"
+import type { TicketFormValues } from "@/types/tickets"
 import { makeTicket } from "@/test/fixtures"
 
 describe("ticket mappers", () => {
@@ -37,6 +40,7 @@ describe("ticket mappers", () => {
     expect(
       validateTicketForm({
         customer_id: "cust-1",
+        conversation_id: "",
         title: "Refund",
         description: "Paid twice",
         status: "OPEN",
@@ -44,12 +48,35 @@ describe("ticket mappers", () => {
         assignee_id: "",
       }),
     ).toBeNull()
+    expect(
+      validateTicketForm({
+        customer_id: "cust-1",
+        conversation_id: "",
+        title: "Refund",
+        description: "Paid twice",
+        status: "DONE" as TicketFormValues["status"],
+        priority: "HIGH",
+        assignee_id: "",
+      }),
+    ).toBe("Invalid status.")
+    expect(
+      validateTicketForm({
+        customer_id: "cust-1",
+        conversation_id: "",
+        title: "Refund",
+        description: "Paid twice",
+        status: "OPEN",
+        priority: "CRITICAL" as TicketFormValues["priority"],
+        assignee_id: "",
+      }),
+    ).toBe("Invalid priority.")
   })
 
   it("omits a blank assignee from create payloads", () => {
     expect(
       toCreatePayload({
         customer_id: "cust-1",
+        conversation_id: "",
         title: " Refund ",
         description: "Paid twice",
         status: "OPEN",
@@ -64,6 +91,37 @@ describe("ticket mappers", () => {
       priority: "HIGH",
       assignee_id: null,
     })
+  })
+
+  it("includes conversation_id on create only when selected", () => {
+    expect(
+      toCreatePayload({
+        ...emptyTicketFormValues(),
+        customer_id: "cust-1",
+        conversation_id: "conv-1",
+        title: "Refund",
+        description: "Paid twice",
+      }),
+    ).toMatchObject({ conversation_id: "conv-1" })
+    expect(
+      toCreatePayload({
+        ...emptyTicketFormValues(),
+        customer_id: "cust-1",
+        title: "Refund",
+        description: "Paid twice",
+      }),
+    ).not.toHaveProperty("conversation_id")
+  })
+
+  it("sends conversation_id null on update to unlink", () => {
+    expect(
+      toUpdatePayload({
+        ...emptyTicketFormValues(),
+        customer_id: "cust-1",
+        title: "Refund",
+        description: "Paid twice",
+      }),
+    ).toMatchObject({ conversation_id: null })
   })
 
   it("labels assignees from the team summary", () => {
@@ -82,5 +140,12 @@ describe("ticket mappers", () => {
         }),
       ),
     ).toBe("Sarah Perera")
+  })
+
+  it("labels linked conversations from the ticket id", () => {
+    expect(ticketConversationLabel(makeTicket())).toBe("Not linked")
+    expect(
+      ticketConversationLabel(makeTicket({ conversation_id: "conv-1" })),
+    ).toBe("Linked · conv-1")
   })
 })

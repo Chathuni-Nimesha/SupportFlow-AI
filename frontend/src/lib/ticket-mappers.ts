@@ -6,6 +6,7 @@ import type {
   TicketStatus,
   TicketUpdatePayload,
 } from "@/types/tickets"
+import { TICKET_PRIORITIES, TICKET_STATUSES } from "@/types/tickets"
 
 export const TICKET_STATUS_LABELS: Record<TicketStatus, string> = {
   OPEN: "Open",
@@ -44,6 +45,7 @@ export function ticketCustomerName(ticket: Ticket): string {
 export function emptyTicketFormValues(): TicketFormValues {
   return {
     customer_id: "",
+    conversation_id: "",
     title: "",
     description: "",
     status: "OPEN",
@@ -55,6 +57,7 @@ export function emptyTicketFormValues(): TicketFormValues {
 export function formValuesFromTicket(ticket: Ticket): TicketFormValues {
   return {
     customer_id: ticket.customer_id,
+    conversation_id: ticket.conversation_id ?? "",
     title: ticket.title,
     description: ticket.description,
     status: ticket.status,
@@ -69,7 +72,7 @@ export function optionalAssignee(value: string): string | null {
 }
 
 export function toCreatePayload(values: TicketFormValues): TicketCreatePayload {
-  return {
+  const payload: TicketCreatePayload = {
     customer_id: values.customer_id.trim(),
     title: values.title.trim(),
     description: values.description.trim(),
@@ -77,17 +80,39 @@ export function toCreatePayload(values: TicketFormValues): TicketCreatePayload {
     priority: values.priority,
     assignee_id: optionalAssignee(values.assignee_id),
   }
+  const conversationId = optionalAssignee(values.conversation_id)
+  if (conversationId) {
+    payload.conversation_id = conversationId
+  }
+  return payload
 }
 
 export function toUpdatePayload(values: TicketFormValues): TicketUpdatePayload {
-  return toCreatePayload(values)
+  return {
+    ...toCreatePayload(values),
+    conversation_id: optionalAssignee(values.conversation_id),
+  }
 }
 
 export function validateTicketForm(values: TicketFormValues): string | null {
   if (!values.customer_id.trim()) return "Select a customer."
   if (!values.title.trim()) return "Title is required."
   if (!values.description.trim()) return "Description is required."
+  if (!(TICKET_STATUSES as readonly string[]).includes(values.status)) {
+    return "Invalid status."
+  }
+  if (!(TICKET_PRIORITIES as readonly string[]).includes(values.priority)) {
+    return "Invalid priority."
+  }
   return null
+}
+
+export function ticketConversationLabel(ticket: {
+  conversation_id?: string | null
+}): string {
+  const conversationId = ticket.conversation_id?.trim()
+  if (!conversationId) return "Not linked"
+  return `Linked · ${conversationId}`
 }
 
 export function assigneeLabel(ticket: {

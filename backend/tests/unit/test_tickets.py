@@ -111,6 +111,7 @@ async def test_create_ticket(
     assert body["status"] == "OPEN"
     assert body["priority"] == "HIGH"
     assert body["customer_id"] == customer["id"]
+    assert body["conversation_id"] is None
     assert body["assignee_id"] is None
     assert body["customer"]["email"] == "elena@acme.example"
     assert body["customer"]["first_name"] == "Elena"
@@ -723,6 +724,12 @@ async def test_update_ticket_rejects_foreign_workspace_customer(
     )
     assert response.status_code == 404
     assert response.json()["detail"] == "Customer not found."
+    still_there = await client.get(
+        f"/api/v1/tickets/{created['id']}",
+        headers=auth_headers,
+    )
+    assert still_there.status_code == 200
+    assert still_there.json()["customer_id"] == customer["id"]
 
 
 @pytest.mark.asyncio
@@ -755,4 +762,5 @@ async def test_backfilled_ticket_is_accessible_in_workspace(
     assert detail.json()["workspace_id"] == me["default_workspace_id"]
     assert detail.json()["owner_id"] == me["id"]
     assert detail.json()["customer_id"] == customer["id"]
+    assert detail.json()["conversation_id"] is None
 
