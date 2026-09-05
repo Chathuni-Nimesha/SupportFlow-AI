@@ -25,6 +25,7 @@ import {
   TICKET_STATUS_LABELS,
 } from "@/lib/ticket-mappers"
 import { listCustomers } from "@/services/customers"
+import { listConversations } from "@/services/conversations"
 import { listTeamMembers } from "@/services/team"
 import {
   createTicket,
@@ -44,6 +45,7 @@ type PanelMode = "closed" | "create" | "edit" | "view" | "delete"
 
 const TICKETS_QUERY_KEY = ["tickets"] as const
 const CUSTOMERS_QUERY_KEY = ["customers"] as const
+const CONVERSATIONS_QUERY_KEY = ["conversations"] as const
 const TEAM_QUERY_KEY = ["team"] as const
 
 function assignableMembers(
@@ -117,6 +119,12 @@ export function TicketsBoard() {
     enabled: panelMode === "create" || panelMode === "edit",
   })
 
+  const conversationsQuery = useQuery({
+    queryKey: [...CONVERSATIONS_QUERY_KEY, "list", "picker"],
+    queryFn: () => listConversations({ page: 1, pageSize: PICKER_PAGE_SIZE }),
+    enabled: panelMode === "create" || panelMode === "edit",
+  })
+
   const teamQuery = useQuery({
     queryKey: [...TEAM_QUERY_KEY, "list", "picker"],
     queryFn: () => listTeamMembers({ page: 1, pageSize: PICKER_PAGE_SIZE }),
@@ -130,6 +138,7 @@ export function TicketsBoard() {
 
   const tickets = listQuery.data?.items ?? []
   const customers = customersQuery.data?.items ?? []
+  const conversations = conversationsQuery.data?.items ?? []
   const teamMembers = teamQuery.data?.items ?? []
   const listError = listQuery.isError
     ? getApiErrorMessage(listQuery.error, "Unable to load tickets.")
@@ -416,6 +425,8 @@ export function TicketsBoard() {
               submitLabel="Create ticket"
               customers={customers}
               customersLoading={customersQuery.isLoading}
+              conversations={conversations}
+              conversationsLoading={conversationsQuery.isLoading}
               members={assignableMembers(teamMembers)}
               membersLoading={teamQuery.isLoading}
               isSaving={isSaving}
@@ -440,6 +451,8 @@ export function TicketsBoard() {
               submitLabel="Save changes"
               customers={customers}
               customersLoading={customersQuery.isLoading}
+              conversations={conversations}
+              conversationsLoading={conversationsQuery.isLoading}
               members={assignableMembers(
                 teamMembers,
                 formValues.assignee_id,
@@ -479,6 +492,7 @@ export function TicketsBoard() {
                 )}
                 membersLoading={teamQuery.isLoading}
                 isSaving={updateMutation.isPending}
+                error={formError}
                 onStatusChange={(status) =>
                   handleQuickUpdate(activeTicket.id, { status })
                 }

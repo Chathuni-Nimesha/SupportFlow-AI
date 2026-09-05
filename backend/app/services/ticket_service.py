@@ -11,8 +11,11 @@ from pymongo.errors import PyMongoError
 from app.core.logging import get_logger
 from app.core.pagination import paginate_find, paginated_payload
 from app.database.mongodb import get_database
+from app.models.conversation import CONVERSATIONS_COLLECTION
 from app.models.customer import CUSTOMERS_COLLECTION
 from app.models.ticket import (
+    TICKET_PRIORITIES,
+    TICKET_STATUSES,
     TICKETS_COLLECTION,
     build_ticket_document,
     serialize_ticket,
@@ -26,6 +29,16 @@ from app.schemas.ticket import (
 from app.services import team_service
 
 logger = get_logger(__name__)
+
+TICKET_CONVERSATION_CUSTOMER_MISMATCH = (
+    "Ticket customer does not match the linked conversation's customer."
+)
+INVALID_TICKET_STATUS = (
+    f"Invalid status. Must be one of: {', '.join(TICKET_STATUSES)}."
+)
+INVALID_TICKET_PRIORITY = (
+    f"Invalid priority. Must be one of: {', '.join(TICKET_PRIORITIES)}."
+)
 
 _REGEX_SPECIAL = re.compile(r"[.^$*+?{}\[\]\\|()]")
 
@@ -47,6 +60,10 @@ def _tickets():
 
 def _customers():
     return _get_collection(CUSTOMERS_COLLECTION)
+
+
+def _conversations():
+    return _get_collection(CONVERSATIONS_COLLECTION)
 
 
 def _db_error(action: str, exc: Exception) -> HTTPException:
@@ -93,6 +110,43 @@ def _ticket_filter(ticket_id: str, workspace_id: str) -> dict[str, str]:
     return {"_id": ticket_id, "workspace_id": workspace_id}
 
 
+def _optional_id(value: Any) -> str | None:
+    cleaned = str(value or "").strip()
+    return cleaned or None
+
+
+def _ensure_ticket_status(value: str) -> str:
+    if value not in TICKET_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=INVALID_TICKET_STATUS,
+        )
+    return value
+
+
+def _ensure_ticket_priority(value: str) -> str:
+    if value not in TICKET_PRIORITIES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=INVALID_TICKET_PRIORITY,
+        )
+    return value
+
+
+def _ensure_matching_conversation_customer(
+    ticket_customer_id: str,
+    conversation: dict[str, Any],
+) -> None:
+    conversation_customer_id = _optional_id(conversation.get("customer_id"))
+    if conversation_customer_id is None:
+        return
+    if conversation_customer_id != ticket_customer_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=TICKET_CONVERSATION_CUSTOMER_MISMATCH,
+        )
+
+
 def _customer_summary(document: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": str(document["_id"]),
@@ -120,6 +174,28 @@ async def _get_workspace_customer(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Customer not found.",
+        )
+    return document
+
+
+async def _get_workspace_conversation(
+    conversation_id: str,
+    workspace_id: str,
+) -> dict[str, Any]:
+    conversation_id = _require_id(conversation_id, "conversation id")
+    workspace_id = _require_id(workspace_id, "workspace id")
+
+    try:
+        document = await _conversations().find_one(
+            {"_id": conversation_id, "workspace_id": workspace_id},
+        )
+    except PyMongoError as exc:
+        raise _db_error("fetch conversation for ticket", exc) from exc
+
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation not found.",
         )
     return document
 
@@ -170,13 +246,13 @@ def _to_response(
     customers: dict[str, dict[str, Any]],
     assignees: dict[str, dict[str, Any]] | None = None,
 ) -> TicketResponse:
-    customer_id = document["customer_id"]
+    customer_id = document.get("customer_id")
     assignee_id = document.get("assignee_id")
     assignee_map = assignees or {}
     return TicketResponse.model_validate(
         serialize_ticket(
             document,
-            customer=customers.get(customer_id),
+            customer=customers.get(customer_id) if customer_id else None,
             assignee=assignee_map.get(assignee_id) if assignee_id else None,
         ),
     )
@@ -202,6 +278,8 @@ async def list_tickets(
             detail="Use either assignee_id or unassigned, not both.",
         )
 
+    # Tenancy is workspace_id only. owner_id is used later for assignee
+    # summaries / OWNER repair, never as a tenant filter.
     filters: dict[str, Any] = {"workspace_id": workspace_id}
     if status_filter:
         filters["status"] = status_filter
@@ -230,7 +308,7 @@ async def list_tickets(
 
     customers = await _customer_summaries(
         workspace_id,
-        [doc["customer_id"] for doc in documents],
+        [doc.get("customer_id") for doc in documents],
     )
     assignees = await team_service.member_summaries(
         workspace_id,
@@ -253,7 +331,10 @@ async def get_ticket(
     owner_id: str,
 ) -> TicketResponse:
     document = await _get_workspace_ticket(ticket_id, workspace_id)
-    customers = await _customer_summaries(workspace_id, [document["customer_id"]])
+    customers = await _customer_summaries(
+        workspace_id,
+        [document.get("customer_id")],
+    )
     assignees = await team_service.member_summaries(
         workspace_id,
         [document["assignee_id"]] if document.get("assignee_id") else [],
@@ -269,7 +350,20 @@ async def create_ticket(
     payload: TicketCreateRequest,
 ) -> TicketResponse:
     workspace_id = _require_id(workspace_id, "workspace id")
+    status_value = _ensure_ticket_status(payload.status)
+    priority_value = _ensure_ticket_priority(payload.priority)
     customer = await _get_workspace_customer(payload.customer_id, workspace_id)
+    conversation_id = None
+    if payload.conversation_id:
+        conversation = await _get_workspace_conversation(
+            payload.conversation_id,
+            workspace_id,
+        )
+        _ensure_matching_conversation_customer(
+            str(customer["_id"]),
+            conversation,
+        )
+        conversation_id = str(conversation["_id"])
     assignee_id = await team_service.require_assignable_member(
         payload.assignee_id,
         workspace_id,
@@ -280,10 +374,11 @@ async def create_ticket(
         owner_id=owner_id,
         workspace_id=workspace_id,
         customer_id=str(customer["_id"]),
+        conversation_id=conversation_id,
         title=payload.title,
         description=payload.description,
-        status=payload.status,
-        priority=payload.priority,
+        status=status_value,
+        priority=priority_value,
         assignee_id=assignee_id,
     )
 
@@ -304,20 +399,23 @@ async def create_ticket(
     )
 
 
-async def update_ticket(
-    ticket_id: str,
-    workspace_id: str,
-    payload: TicketUpdateRequest,
+async def _validated_ticket_updates(
     *,
+    existing: dict[str, Any],
+    payload: TicketUpdateRequest,
+    workspace_id: str,
     owner_id: str,
-) -> TicketResponse:
-    await _get_workspace_ticket(ticket_id, workspace_id)
-    ticket_id = _require_id(ticket_id, "ticket id")
-    workspace_id = _require_id(workspace_id, "workspace id")
-
+) -> tuple[dict[str, Any], dict[str, str]]:
+    """Resolve PATCH fields. Raises before the caller writes anything."""
     updates = payload.model_dump(exclude_unset=True)
     updates.pop("workspace_id", None)
     updates.pop("owner_id", None)
+
+    if "status" in updates:
+        updates["status"] = _ensure_ticket_status(updates["status"])
+    if "priority" in updates:
+        updates["priority"] = _ensure_ticket_priority(updates["priority"])
+
     if "assignee_id" in updates:
         updates["assignee_id"] = await team_service.require_assignable_member(
             updates["assignee_id"],
@@ -325,23 +423,85 @@ async def update_ticket(
             owner_id=owner_id,
         )
 
-    if "customer_id" in updates and updates["customer_id"] is not None:
+    customer_id_in_request = "customer_id" in updates
+    if customer_id_in_request and updates["customer_id"] is None:
+        # Tickets require a customer. Null does not unlink.
+        updates.pop("customer_id")
+        customer_id_in_request = False
+    elif customer_id_in_request:
         customer = await _get_workspace_customer(updates["customer_id"], workspace_id)
         updates["customer_id"] = str(customer["_id"])
 
-    if not updates:
+    unset_fields: dict[str, str] = {}
+    conversation_id_in_request = "conversation_id" in updates
+    if conversation_id_in_request:
+        requested_conversation_id = updates.pop("conversation_id")
+        if requested_conversation_id is None:
+            unset_fields["conversation_id"] = ""
+        else:
+            conversation = await _get_workspace_conversation(
+                requested_conversation_id,
+                workspace_id,
+            )
+            updates["conversation_id"] = str(conversation["_id"])
+
+    if customer_id_in_request or conversation_id_in_request:
+        resulting_customer_id = _optional_id(
+            updates.get("customer_id", existing.get("customer_id")),
+        )
+        if "conversation_id" in unset_fields:
+            resulting_conversation_id = None
+        elif "conversation_id" in updates:
+            resulting_conversation_id = _optional_id(updates.get("conversation_id"))
+        else:
+            resulting_conversation_id = _optional_id(existing.get("conversation_id"))
+        if resulting_customer_id and resulting_conversation_id:
+            conversation = await _get_workspace_conversation(
+                resulting_conversation_id,
+                workspace_id,
+            )
+            _ensure_matching_conversation_customer(
+                resulting_customer_id,
+                conversation,
+            )
+
+    return updates, unset_fields
+
+
+async def update_ticket(
+    ticket_id: str,
+    workspace_id: str,
+    payload: TicketUpdateRequest,
+    *,
+    owner_id: str,
+) -> TicketResponse:
+    existing = await _get_workspace_ticket(ticket_id, workspace_id)
+    ticket_id = _require_id(ticket_id, "ticket id")
+    workspace_id = _require_id(workspace_id, "workspace id")
+
+    updates, unset_fields = await _validated_ticket_updates(
+        existing=existing,
+        payload=payload,
+        workspace_id=workspace_id,
+        owner_id=owner_id,
+    )
+
+    if not updates and not unset_fields:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No fields provided for update.",
         )
 
     updates["updated_at"] = utc_now()
+    operations: dict[str, Any] = {"$set": updates}
+    if unset_fields:
+        operations["$unset"] = unset_fields
     tenant_filter = _ticket_filter(ticket_id, workspace_id)
 
     try:
         await _tickets().update_one(
             tenant_filter,
-            {"$set": updates},
+            operations,
         )
         document = await _tickets().find_one(tenant_filter)
     except PyMongoError as exc:
@@ -353,7 +513,10 @@ async def update_ticket(
             detail="Ticket not found.",
         )
 
-    customers = await _customer_summaries(workspace_id, [document["customer_id"]])
+    customers = await _customer_summaries(
+        workspace_id,
+        [document.get("customer_id")],
+    )
     assignees = await team_service.member_summaries(
         workspace_id,
         [document["assignee_id"]] if document.get("assignee_id") else [],

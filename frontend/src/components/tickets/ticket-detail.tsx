@@ -8,6 +8,7 @@ import {
   TICKET_STATUS_LABELS,
   assigneeLabel,
   formatTicketDate,
+  ticketConversationLabel,
   ticketCustomerName,
 } from "@/lib/ticket-mappers"
 import { teamMemberDisplayName } from "@/lib/team-mappers"
@@ -28,6 +29,7 @@ type TicketDetailPanelProps = {
   members: TeamMember[]
   membersLoading?: boolean
   isSaving?: boolean
+  error?: string | null
 }
 
 export function TicketDetailPanel({
@@ -40,26 +42,55 @@ export function TicketDetailPanel({
   members,
   membersLoading = false,
   isSaving = false,
+  error = null,
 }: TicketDetailPanelProps) {
   const customerName = ticketCustomerName(ticket)
+  const conversationLabel = ticketConversationLabel(ticket)
 
   return (
     <div className="flex h-full flex-col">
       <ScrollArea className="flex-1">
         <div className="space-y-5 px-4 py-4">
+          {error ? (
+            <p
+              className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200"
+              role="alert"
+            >
+              {error}
+            </p>
+          ) : null}
+
           <div className="space-y-1">
             <h2 className="text-lg font-semibold tracking-tight text-foreground">
               {ticket.title}
             </h2>
-            <p className="text-sm text-muted-foreground">
-              {customerName}
-              {ticket.customer?.email ? ` · ${ticket.customer.email}` : ""}
-            </p>
             <p className="text-xs text-muted-foreground">
               Created {formatTicketDate(ticket.created_at)} · Updated{" "}
               {formatTicketDate(ticket.updated_at)}
             </p>
           </div>
+
+          <dl className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                Customer
+              </dt>
+              <dd className="text-sm font-medium text-foreground">{customerName}</dd>
+              {ticket.customer?.email ? (
+                <dd className="text-xs text-muted-foreground">
+                  {ticket.customer.email}
+                </dd>
+              ) : null}
+            </div>
+            <div className="space-y-1">
+              <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                Linked conversation
+              </dt>
+              <dd className="text-sm font-medium text-foreground">
+                {conversationLabel}
+              </dd>
+            </div>
+          </dl>
 
           <div className="rounded-2xl border border-border/80 bg-background p-4 shadow-soft">
             <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">

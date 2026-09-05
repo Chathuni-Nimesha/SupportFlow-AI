@@ -1,9 +1,12 @@
+import { AxiosError } from "axios"
+import type { InternalAxiosRequestConfig } from "axios"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import userEvent from "@testing-library/user-event"
 import { screen, waitFor, within } from "@testing-library/react"
 
 import { TicketsBoard } from "@/components/tickets/tickets-board"
 import { listCustomers } from "@/services/customers"
+import { listConversations } from "@/services/conversations"
 import { listTeamMembers } from "@/services/team"
 import {
   createTicket,
@@ -34,6 +37,10 @@ vi.mock("@/services/customers", () => ({
   deleteCustomer: vi.fn(),
 }))
 
+vi.mock("@/services/conversations", () => ({
+  listConversations: vi.fn(),
+}))
+
 vi.mock("@/services/tickets", () => ({
   listTickets: vi.fn(),
   getTicket: vi.fn(),
@@ -50,6 +57,22 @@ vi.mock("@/services/team", () => ({
   deleteTeamMember: vi.fn(),
 }))
 
+function apiError(detail: string, status = 400) {
+  return new AxiosError(
+    detail,
+    AxiosError.ERR_BAD_REQUEST,
+    undefined,
+    undefined,
+    {
+      status,
+      statusText: "Bad Request",
+      data: { detail },
+      headers: {},
+      config: { headers: {} } as InternalAxiosRequestConfig,
+    },
+  )
+}
+
 describe("TicketsBoard", () => {
   beforeEach(() => {
     vi.mocked(listTickets).mockReset()
@@ -59,6 +82,8 @@ describe("TicketsBoard", () => {
     vi.mocked(deleteTicket).mockReset()
     vi.mocked(listCustomers).mockReset()
     vi.mocked(listCustomers).mockResolvedValue(asPage([makeCustomer()]))
+    vi.mocked(listConversations).mockReset()
+    vi.mocked(listConversations).mockResolvedValue(asPage([]))
     vi.mocked(listTeamMembers).mockReset()
     vi.mocked(listTeamMembers).mockResolvedValue(asPage([
       makeOwnerMember(),
@@ -201,7 +226,10 @@ describe("TicketsBoard", () => {
     expect(
       await within(dialog).findByText("Refund not received"),
     ).toBeInTheDocument()
+    expect(within(dialog).getByText("Customer")).toBeInTheDocument()
     expect(within(dialog).getByText(/Elena Park/)).toBeInTheDocument()
+    expect(within(dialog).getByText("Linked conversation")).toBeInTheDocument()
+    expect(within(dialog).getByText("Not linked")).toBeInTheDocument()
     expect(
       within(dialog).getByRole("link", { name: "View customer" }),
     ).toHaveAttribute("href", "/dashboard/customers")
@@ -339,11 +367,14 @@ describe("TicketsBoard", () => {
 
     await user.type(screen.getByLabelText("Search tickets"), "duplicate")
 
-    await waitFor(() => {
-      expect(listTickets).toHaveBeenCalledWith(
-        expect.objectContaining({ query: "duplicate" }),
-      )
-    })
+    await waitFor(
+      () => {
+        expect(listTickets).toHaveBeenCalledWith(
+          expect.objectContaining({ query: "duplicate" }),
+        )
+      },
+      { timeout: 3000 },
+    )
     expect(await screen.findByText("Refund not received")).toBeInTheDocument()
     await waitFor(() => {
       expect(screen.queryByText("Password reset")).not.toBeInTheDocument()
@@ -431,6 +462,57 @@ describe("TicketsBoard", () => {
     const dialog = await screen.findByRole("dialog")
     expect(within(dialog).getByText("Assigned to")).toBeInTheDocument()
     expect(within(dialog).getAllByText("Sarah Perera").length).toBeGreaterThan(0)
+  })
+
+  it("shows create API errors on the ticket form", async () => {
+    const user = userEvent.setup()
+    vi.mocked(listTickets).mockResolvedValue(asPage([]))
+    vi.mocked(createTicket).mockRejectedValue(
+      apiError(
+        "Ticket customer does not match the linked conversation's customer.",
+      ),
+    )
+
+    renderWithProviders(<TicketsBoard />)
+    await user.click(await screen.findByRole("button", { name: "New ticket" }))
+    await screen.findByRole("heading", { name: "New ticket" })
+    expect(
+      await screen.findByRole("option", { name: /Elena Park/ }),
+    ).toBeInTheDocument()
+    await user.selectOptions(screen.getByLabelText("Customer"), "cust-1")
+    await user.type(screen.getByLabelText("Title"), "Refund not received")
+    await user.type(screen.getByLabelText("Description"), "Paid twice")
+    await user.click(screen.getByRole("button", { name: "Create ticket" }))
+
+    expect(
+      await screen.findByText(
+        "Ticket customer does not match the linked conversation's customer.",
+      ),
+    ).toBeInTheDocument()
+  }, 10_000)
+
+  it("shows detail update errors for invalid assignees", async () => {
+    const user = userEvent.setup()
+    const ticket = makeTicket()
+    vi.mocked(listTickets).mockResolvedValue(asPage([ticket]))
+    vi.mocked(getTicket).mockResolvedValue(ticket)
+    vi.mocked(updateTicket).mockRejectedValue(
+      apiError("Assignee is not an active team member."),
+    )
+
+    renderWithProviders(<TicketsBoard />)
+    await user.click(
+      await screen.findByRole("button", { name: "View Refund not received" }),
+    )
+    const dialog = await screen.findByRole("dialog")
+    const status = await within(dialog).findByLabelText("Status")
+    await user.selectOptions(status, "IN_PROGRESS")
+
+    expect(
+      await within(dialog).findByText(
+        "Assignee is not an active team member.",
+      ),
+    ).toBeInTheDocument()
   })
 
   it("keeps ticket workflows available for AGENT", async () => {

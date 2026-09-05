@@ -200,6 +200,7 @@ export function makeTicket(overrides: Partial<Ticket> = {}): Ticket {
     owner_id: "user-1",
     workspace_id: "workspace-1",
     customer_id: "cust-1",
+    conversation_id: null,
     title: "Refund not received",
     description: "Customer paid twice and needs the duplicate charge reversed.",
     status: "OPEN",

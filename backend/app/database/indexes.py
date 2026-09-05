@@ -111,6 +111,9 @@ async def ensure_indexes() -> None:
     await db[TICKETS_COLLECTION].create_index(
         [("workspace_id", 1), ("customer_id", 1)],
     )
+    await db[TICKETS_COLLECTION].create_index(
+        [("workspace_id", 1), ("conversation_id", 1)],
+    )
     await db[TEAM_MEMBERS_COLLECTION].create_index(
         [("owner_id", 1), ("updated_at", -1)],
     )
