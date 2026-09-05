@@ -88,6 +88,12 @@ export function CustomerDetailPanel({
                         {conversation.last_message}
                       </p>
                     ) : null}
+                    <Link
+                      to={`/dashboard/conversations?conversation=${encodeURIComponent(conversation.id)}`}
+                      className="mt-2 inline-block text-xs font-medium text-primary hover:underline"
+                    >
+                      Open conversation
+                    </Link>
                   </li>
                 ))}
               </ul>

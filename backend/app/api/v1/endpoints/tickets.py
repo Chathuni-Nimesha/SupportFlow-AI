@@ -49,6 +49,10 @@ async def list_tickets(
         str | None,
         Query(max_length=100, description="Filter by customer id"),
     ] = None,
+    conversation_id: Annotated[
+        str | None,
+        Query(max_length=100, description="Filter by linked conversation id"),
+    ] = None,
     page: PageParam = DEFAULT_LIST_PAGE,
     page_size: PageSizeParam = DEFAULT_LIST_PAGE_SIZE,
 ) -> PaginatedResponse[TicketResponse]:
@@ -61,6 +65,7 @@ async def list_tickets(
         assignee_id=assignee_id,
         unassigned=unassigned,
         customer_id=customer_id,
+        conversation_id=conversation_id,
         page=page,
         page_size=page_size,
     )

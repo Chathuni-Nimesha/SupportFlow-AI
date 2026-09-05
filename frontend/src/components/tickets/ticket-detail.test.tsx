@@ -30,7 +30,7 @@ describe("TicketDetailPanel", () => {
     expect(screen.getByText("Not linked")).toBeInTheDocument()
   })
 
-  it("shows a linked conversation id without inventing navigation", () => {
+  it("links a conversation id to the inbox without changing ticket data", () => {
     renderWithProviders(
       <TicketDetailPanel
         ticket={makeTicket({ conversation_id: "conv-42" })}
@@ -44,6 +44,9 @@ describe("TicketDetailPanel", () => {
     )
 
     expect(screen.getByText("Linked · conv-42")).toBeInTheDocument()
+    expect(
+      screen.getByRole("link", { name: "Open conversation" }),
+    ).toHaveAttribute("href", "/dashboard/conversations?conversation=conv-42")
   })
 
   it("displays workflow update errors", () => {

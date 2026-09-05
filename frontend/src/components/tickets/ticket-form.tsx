@@ -39,6 +39,7 @@ type TicketFormProps = {
   isSaving?: boolean
   error?: string | null
   lockCustomer?: boolean
+  lockConversation?: boolean
 }
 
 export function TicketForm({
@@ -56,6 +57,7 @@ export function TicketForm({
   isSaving = false,
   error = null,
   lockCustomer = false,
+  lockConversation = false,
 }: TicketFormProps) {
   const update = <K extends keyof TicketFormValues>(
     key: K,
@@ -135,7 +137,7 @@ export function TicketForm({
             value={values.conversation_id}
             onChange={(event) => selectConversation(event.target.value)}
             className={selectClassName}
-            disabled={isSaving || conversationsLoading}
+            disabled={isSaving || conversationsLoading || lockConversation}
           >
             <option value="">
               {conversationsLoading

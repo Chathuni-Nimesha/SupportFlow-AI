@@ -216,6 +216,12 @@ describe("CustomersBoard", () => {
       within(dialog).getByRole("link", { name: "Open conversations" }),
     ).toHaveAttribute("href", "/dashboard/conversations")
     expect(
+      within(dialog).getByRole("link", { name: "Open conversation" }),
+    ).toHaveAttribute(
+      "href",
+      "/dashboard/conversations?conversation=conv-1",
+    )
+    expect(
       await within(dialog).findByText("No tickets for this customer yet."),
     ).toBeInTheDocument()
     expect(

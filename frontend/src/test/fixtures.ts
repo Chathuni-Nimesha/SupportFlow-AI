@@ -150,6 +150,7 @@ export function makeConversation(
     updatedAt: "2026-08-20T12:00:00.000Z",
     filterTags: ["inbox", "open"],
     messages: [],
+    customerId: null,
     ...overrides,
   }
 }

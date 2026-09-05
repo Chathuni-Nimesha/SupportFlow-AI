@@ -384,3 +384,136 @@ async def test_ticket_conversation_link_stays_in_current_workspace(
     )
     assert still_there.status_code == 200
     assert still_there.json()["conversation_id"] == conversation["id"]
+
+
+@pytest.mark.asyncio
+async def test_list_tickets_filters_by_conversation_id_in_workspace(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+) -> None:
+    customer = await _create_customer(client, auth_headers)
+    conversation = await _create_conversation(
+        client,
+        auth_headers,
+        customer_id=customer["id"],
+    )
+    other_conversation = await _create_conversation(
+        client,
+        auth_headers,
+        customer_id=customer["id"],
+        subject="Unrelated thread",
+        customer_email="elena@acme.example",
+    )
+    linked = await _create_ticket(
+        client,
+        auth_headers,
+        customer["id"],
+        conversation_id=conversation["id"],
+        title="Linked refund ticket",
+    )
+    await _create_ticket(
+        client,
+        auth_headers,
+        customer["id"],
+        conversation_id=other_conversation["id"],
+        title="Other thread ticket",
+    )
+    unlinked = await _create_ticket(
+        client,
+        auth_headers,
+        customer["id"],
+        title="No conversation ticket",
+    )
+
+    listed = await client.get(
+        "/api/v1/tickets",
+        headers=auth_headers,
+        params={"conversation_id": conversation["id"]},
+    )
+    assert listed.status_code == 200
+    ids = [item["id"] for item in listed.json()["items"]]
+    assert ids == [linked["id"]]
+    assert unlinked["id"] not in ids
+
+
+@pytest.mark.asyncio
+async def test_list_tickets_conversation_filter_stays_workspace_scoped(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    sample_register_payload: dict,
+) -> None:
+    customer = await _create_customer(client, auth_headers)
+    conversation = await _create_conversation(
+        client,
+        auth_headers,
+        customer_id=customer["id"],
+    )
+    local = await _create_ticket(
+        client,
+        auth_headers,
+        customer["id"],
+        conversation_id=conversation["id"],
+        title="Local linked ticket",
+    )
+
+    other_headers = await _other_headers(
+        client,
+        sample_register_payload,
+        "other-conversation-filter@acme.example",
+    )
+    other_customer = await _create_customer(
+        client,
+        other_headers,
+        email="other-filter@acme.example",
+    )
+    foreign_conversation = await _create_conversation(
+        client,
+        other_headers,
+        customer_id=other_customer["id"],
+        customer_email="other-filter@acme.example",
+        customer_name="Other User",
+    )
+    foreign = await _create_ticket(
+        client,
+        other_headers,
+        other_customer["id"],
+        conversation_id=foreign_conversation["id"],
+        title="Foreign linked ticket",
+    )
+
+    leaked = await client.get(
+        "/api/v1/tickets",
+        headers=auth_headers,
+        params={"conversation_id": foreign_conversation["id"]},
+    )
+    assert leaked.status_code == 200
+    assert leaked.json()["items"] == []
+
+    other_listed = await client.get(
+        "/api/v1/tickets",
+        headers=other_headers,
+        params={"conversation_id": conversation["id"]},
+    )
+    assert other_listed.status_code == 200
+    assert other_listed.json()["items"] == []
+
+    local_listed = await client.get(
+        "/api/v1/tickets",
+        headers=auth_headers,
+        params={"conversation_id": conversation["id"]},
+    )
+    assert [item["id"] for item in local_listed.json()["items"]] == [local["id"]]
+    assert foreign["id"] not in [
+        item["id"] for item in local_listed.json()["items"]
+    ]
+
+    ignored = await client.get(
+        "/api/v1/tickets",
+        headers=auth_headers,
+        params={
+            "conversation_id": conversation["id"],
+            "workspace_id": "forged-workspace",
+        },
+    )
+    assert ignored.status_code == 200
+    assert [item["id"] for item in ignored.json()["items"]] == [local["id"]]
