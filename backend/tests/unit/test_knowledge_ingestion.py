@@ -4,7 +4,7 @@ import pytest
 from httpx import AsyncClient
 
 from app.database.chroma import get_knowledge_collection, reset_chroma_client
-from app.services.knowledge_ingestion import chunk_text
+from app.services.knowledge_ingestion import chroma_document_delete_filter, chunk_text
 
 
 SAMPLE_PUBLISHED = {
@@ -33,6 +33,20 @@ def test_chunk_text_splits_long_content() -> None:
     chunks = chunk_text(text, chunk_size=100, overlap=20)
     assert len(chunks) > 1
     assert all(chunk for chunk in chunks)
+
+
+def test_chroma_delete_filter_includes_workspace_when_available() -> None:
+    assert chroma_document_delete_filter("doc-1", "workspace-1") == {
+        "$and": [
+            {"document_id": "doc-1"},
+            {"workspace_id": "workspace-1"},
+        ],
+    }
+
+
+def test_chroma_delete_filter_falls_back_to_document_id() -> None:
+    assert chroma_document_delete_filter("doc-1", None) == {"document_id": "doc-1"}
+    assert chroma_document_delete_filter("doc-1", "  ") == {"document_id": "doc-1"}
 
 
 @pytest.mark.asyncio

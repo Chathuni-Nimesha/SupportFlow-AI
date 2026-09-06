@@ -199,13 +199,16 @@ Copy-Item frontend\.env.example frontend\.env
 VITE_API_BASE_URL=http://localhost:8000/api/v1
 ```
 
-That must match the running FastAPI prefix.
+That must match the running FastAPI prefix. **Development** (`npm run dev`) may use this localhost default. **Production builds** (`npm run build`) fail if `VITE_API_BASE_URL` is missing or set to localhost/loopback. Vite inlines this value at build time. Do not put secrets, MongoDB URIs, JWT secrets, or Gemini keys in frontend env files.
 
 ---
 
 ## Running MongoDB
 
-The API uses Motor and pings MongoDB on startup (`backend/app/database/mongodb.py`). If MongoDB is down, the API still starts and data routes return **503** until it is reachable.
+The API uses Motor and pings MongoDB on startup (`backend/app/database/mongodb.py`).
+
+- **Development:** if MongoDB is down, the API still starts and data routes return **503** until it is reachable. `GET /health` reports `degraded`.
+- **Production (`APP_ENV=production`):** MongoDB connection and index setup must succeed or the process **refuses to start**. Localhost MongoDB URIs are rejected. `GET /health` is unchanged (`ok`/`connected` or `503`/`disconnected`) and never includes the URI.
 
 **Option A — MongoDB Atlas**  
 Use a `mongodb+srv://…` URI in `backend/.env` (URL-encode special characters in the password). This matches the template in `backend/.env.example`.
@@ -241,6 +244,86 @@ chroma run --path .\backend\chroma --host localhost --port 8001
 `--path` is the Chroma **server** persist directory (`backend/chroma/` is gitignored). It is separate from `CHROMA_PERSIST_DIRECTORY=.chroma`, which is only used when `CHROMA_MODE=persistent` (in-process client, no HTTP server).
 
 Leave this process running while you demo AI features.
+
+---
+
+## Production deployment
+
+This is a two-process deploy: FastAPI + a static React SPA. There is no Docker image in this repository. Do not commit real secrets.
+
+### New empty MongoDB vs existing database
+
+| Database | What to run |
+|---|---|
+| **New empty MongoDB** | Nothing extra. Registering a user creates a personal workspace and stamps `workspace_id`. Indexes are created on API startup. |
+| **Existing database from earlier phases** | Dry-run, then run, from `backend/`: `python -m scripts.backfill_workspaces`, then `python -m scripts.reindex_knowledge_chroma`, then `python -m scripts.cleanup_owner_id`. Do **not** run these on startup. Skip them on a greenfield database. |
+
+### Backend environment
+
+Set these on the API host (`backend/.env` or the platform env). Never paste real values into git.
+
+| Variable | Production requirement |
+|---|---|
+| `APP_ENV` | `production` |
+| `JWT_SECRET` | Unique non-placeholder secret. Placeholder values refuse to start. |
+| `MONGODB_URI` | Real Atlas or remote URI. Localhost / `127.0.0.1` is rejected. |
+| `MONGODB_DATABASE` | Database name (example: `supportflow_ai`) |
+| `CORS_ORIGINS` | Exact HTTPS frontend origin(s), comma-separated. Never `*`. |
+| `GOOGLE_API_KEY` | Real Gemini key for AI answers/suggestions. Not required to start the process. |
+| Chroma | `CHROMA_MODE=http` on loopback, or a remote host with TLS and/or `CHROMA_AUTH_TOKEN`. Gemini/Chroma are not required for process start. |
+
+Start **one** Uvicorn worker. Auth and AI/search rate limits are in-memory and **not** shared across workers.
+
+```powershell
+cd backend
+.\.venv\Scripts\Activate.ps1
+uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1
+```
+
+Gate traffic on `GET /health`. `200` + `"database": "connected"` means MongoDB answered ping. The response does not include connection strings.
+
+Put TLS in front of the API (platform proxy or reverse proxy). Do not mix an HTTPS frontend with an HTTP API in the browser.
+
+### Frontend build
+
+```powershell
+cd frontend
+$env:VITE_API_BASE_URL="https://api.example.com/api/v1"
+npm run build
+```
+
+Serve `frontend/dist`. `VITE_API_BASE_URL` must be the public API origin including `/api/v1`. Localhost values fail the production build.
+
+### SPA fallback (deep links)
+
+React Router owns client routes such as `/dashboard`, `/dashboard/conversations`, `/dashboard/tickets`, `/dashboard/customers`, `/dashboard/knowledge-base`, plus query deep links `?ticket=`, `?customer=`, and `?conversation=`. The static host must serve `index.html` for those paths.
+
+Shipped config (host-agnostic; does not change app behavior):
+
+| File | Host |
+|---|---|
+| `frontend/vercel.json` | Vercel rewrite `/(.*) → /index.html` (existing files such as `/assets/*` are still served) |
+| `frontend/public/_redirects` | Netlify `/* /index.html 200` (copied into `dist/` on build) |
+
+Nginx equivalent:
+
+```nginx
+location / {
+  try_files $uri $uri/ /index.html;
+}
+```
+
+Without this fallback, refreshing `/dashboard/tickets?ticket=<id>` returns 404.
+
+### Production checklist
+
+1. `APP_ENV=production`, unique `JWT_SECRET`, non-localhost `MONGODB_URI`, `MONGODB_DATABASE`
+2. `CORS_ORIGINS` = the HTTPS SPA origin
+3. Build the SPA with a non-localhost `VITE_API_BASE_URL`
+4. SPA fallback for dashboard routes and query deep links
+5. One Uvicorn worker; `/health` returns 200
+6. Chroma running before a knowledge/AI demo; `GOOGLE_API_KEY` set for Gemini
+7. Migrations only when reusing an existing (pre-workspace) database
 
 ---
 
@@ -417,7 +500,8 @@ Sidebar pages for tickets, customers, and team are connected to live workspace-s
 - In-memory rate limits on AI answer/suggest (default 60 / 60s per user and 180 / 60s per workspace) and knowledge search (default 120 / 60s per user and 360 / 60s per workspace)
 - CORS allow-list with credentials; development Vite ports 5173–5175; production origins from `CORS_ORIGINS` (wildcard rejected)
 - `GET /health` reports MongoDB connectivity without exposing connection details
-- Production (`APP_ENV=production`): refuses placeholder `JWT_SECRET`, disables debug/docs, rejects public unauthenticated Chroma HTTP hosts
+- Production (`APP_ENV=production`): refuses placeholder `JWT_SECRET`, refuses localhost `MONGODB_URI`, fails startup if MongoDB/indexes cannot initialize, disables debug/docs, rejects public unauthenticated Chroma HTTP hosts
+- Passwords longer than 72 bytes are rejected (bcrypt limit)
 - Secrets loaded from environment / `backend/.env` (not committed)
 
 Not claimed: httpOnly cookie sessions, CSRF tokens, CSP, SSO, distributed rate limiting, or a hardened public Chroma ACL.
@@ -436,7 +520,7 @@ Not claimed: httpOnly cookie sessions, CSRF tokens, CSP, SSO, distributed rate l
 - Conversation **messages** are not paginated (a thread is loaded as a unit; lists of conversations/customers/tickets/team/knowledge documents are).
 - The conversation **inbox UI** loads the first 100 threads. Extra pages exist on the API but are not shown there.
 - Customers with tickets cannot be deleted until those tickets are reassigned or removed. Conversations are unlinked, not deleted.
-- No production deploy config is shipped beyond environment flags.
+- Production SPA hosting needs `index.html` fallback (see `frontend/vercel.json` and `frontend/public/_redirects`).
 - Automated tests are unit-level (mocked DB / ephemeral Chroma). There is no E2E suite against real MongoDB + Chroma + Gemini.
 
 These are scope choices, not silent failures of the connected modules.

@@ -267,7 +267,10 @@ async def delete_knowledge_document(
     workspace_id = _require_id(workspace_id, "workspace id")
 
     try:
-        await knowledge_ingestion.remove_document_embeddings(document_id)
+        await knowledge_ingestion.remove_document_embeddings(
+            document_id,
+            workspace_id,
+        )
     except Exception:
         logger.exception(
             "Failed to remove Chroma embeddings for document %s",

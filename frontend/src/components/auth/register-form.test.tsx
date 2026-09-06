@@ -33,7 +33,6 @@ async function fillValidRegisterForm(user: UserEvent) {
   await user.type(screen.getByLabelText("Work email"), "ava@acme.example")
   await user.type(screen.getByLabelText("Password"), "password123")
   await user.type(screen.getByLabelText("Confirm password"), "password123")
-  await user.click(screen.getByRole("checkbox"))
 }
 
 describe("RegisterForm", () => {
@@ -54,7 +53,9 @@ describe("RegisterForm", () => {
     expect(screen.getByLabelText("Work email")).toBeInTheDocument()
     expect(screen.getByLabelText("Password")).toBeInTheDocument()
     expect(screen.getByLabelText("Confirm password")).toBeInTheDocument()
-    expect(screen.getByRole("checkbox")).toBeInTheDocument()
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument()
+    expect(screen.queryByText(/Terms & Conditions/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Privacy Policy/i)).not.toBeInTheDocument()
     expect(
       screen.getByRole("button", { name: "Create account" }),
     ).toBeInTheDocument()
@@ -77,9 +78,6 @@ describe("RegisterForm", () => {
     expect(screen.getByText("Work email is required")).toBeInTheDocument()
     expect(screen.getByText("Password is required")).toBeInTheDocument()
     expect(screen.getByText("Please confirm your password")).toBeInTheDocument()
-    expect(
-      screen.getByText("You must accept the Terms & Conditions"),
-    ).toBeInTheDocument()
     expect(registerUser).not.toHaveBeenCalled()
   })
 
@@ -94,7 +92,6 @@ describe("RegisterForm", () => {
     await user.type(screen.getByLabelText("Work email"), "not-an-email")
     await user.type(screen.getByLabelText("Password"), "password123")
     await user.type(screen.getByLabelText("Confirm password"), "password123")
-    await user.click(screen.getByRole("checkbox"))
     await user.click(screen.getByRole("button", { name: "Create account" }))
 
     expect(
@@ -114,7 +111,6 @@ describe("RegisterForm", () => {
     await user.type(screen.getByLabelText("Work email"), "ava@acme.example")
     await user.type(screen.getByLabelText("Password"), "short7!")
     await user.type(screen.getByLabelText("Confirm password"), "short7!")
-    await user.click(screen.getByRole("checkbox"))
     await user.click(screen.getByRole("button", { name: "Create account" }))
 
     expect(
@@ -134,7 +130,6 @@ describe("RegisterForm", () => {
     await user.type(screen.getByLabelText("Work email"), "ava@acme.example")
     await user.type(screen.getByLabelText("Password"), "password123")
     await user.type(screen.getByLabelText("Confirm password"), "password456")
-    await user.click(screen.getByRole("checkbox"))
     await user.click(screen.getByRole("button", { name: "Create account" }))
 
     expect(await screen.findByText("Passwords do not match")).toBeInTheDocument()
