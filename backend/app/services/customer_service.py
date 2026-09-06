@@ -21,6 +21,7 @@ from app.models.customer import (
     serialize_customer,
     utc_now,
 )
+from app.models.ticket import TICKETS_COLLECTION
 from app.schemas.conversation import ConversationResponse
 from app.schemas.customer import (
     CustomerCreateRequest,
@@ -30,6 +31,11 @@ from app.schemas.customer import (
 )
 
 logger = get_logger(__name__)
+
+CUSTOMER_HAS_LINKED_TICKETS = (
+    "This customer cannot be deleted while tickets are still linked. "
+    "Reassign or delete those tickets first."
+)
 
 _REGEX_SPECIAL = re.compile(r"[.^$*+?{}\[\]\\|()]")
 
@@ -51,6 +57,10 @@ def _customers():
 
 def _conversations():
     return _get_collection(CONVERSATIONS_COLLECTION)
+
+
+def _tickets():
+    return _get_collection(TICKETS_COLLECTION)
 
 
 def _db_error(action: str, exc: Exception) -> HTTPException:
@@ -307,11 +317,41 @@ async def update_customer(
 
 
 async def delete_customer(customer_id: str, workspace_id: str) -> None:
+    """Delete a workspace customer without cascade-deleting work items.
+
+    Product rule:
+    - Tickets still require ``customer_id``, so linked tickets in this
+      workspace block deletion with HTTP 409. Tickets are never deleted
+      or rewritten to an invalid/null customer.
+    - Conversations may omit ``customer_id``. If no tickets block the
+      delete, workspace-scoped conversations are unlinked (``customer_id``
+      unset) while ``customer_name`` / ``customer_email`` snapshots stay.
+    - Lookups and writes are always filtered by the current workspace.
+    """
     await _get_workspace_customer(customer_id, workspace_id)
     customer_id = _require_customer_id(customer_id)
     workspace_id = _require_workspace_id(workspace_id)
+    tenant_customer = {"customer_id": customer_id, "workspace_id": workspace_id}
 
     try:
+        linked_tickets = await _tickets().count_documents(tenant_customer)
+    except PyMongoError as exc:
+        raise _db_error("count customer tickets", exc) from exc
+
+    if linked_tickets:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=CUSTOMER_HAS_LINKED_TICKETS,
+        )
+
+    try:
+        await _conversations().update_many(
+            tenant_customer,
+            {
+                "$unset": {"customer_id": ""},
+                "$set": {"updated_at": utc_now()},
+            },
+        )
         result = await _customers().delete_one(
             _customer_filter(customer_id, workspace_id),
         )

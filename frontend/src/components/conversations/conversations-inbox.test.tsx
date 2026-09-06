@@ -115,6 +115,22 @@ describe("ConversationsInbox", () => {
     expect(screen.getByText("Select a conversation")).toBeInTheDocument()
   })
 
+  it("warns when more than 100 conversations exist", async () => {
+    vi.mocked(listConversations).mockResolvedValue(
+      asPage([makeConversationApi()], { total: 101, hasNext: true }),
+    )
+    vi.mocked(getConversation).mockResolvedValue(makeConversationApi())
+    vi.mocked(listConversationMessages).mockResolvedValue([makeMessageApi()])
+
+    renderWithProviders(<ConversationsInbox />)
+
+    expect(
+      await screen.findByText(
+        "Showing the first 100 conversations. Pagination is coming soon.",
+      ),
+    ).toBeInTheDocument()
+  })
+
   it("shows an error when the list API fails", async () => {
     vi.mocked(listConversations).mockRejectedValue(
       new Error("Conversations unavailable"),
@@ -417,6 +433,73 @@ describe("ConversationsInbox", () => {
     })
   })
 
+  it("assigns, reassigns, and unassigns a conversation agent without changing status", async () => {
+    const user = userEvent.setup()
+    const first = makeTeamMember()
+    const second = makeTeamMember({
+      id: "member-2",
+      first_name: "Jordan",
+      last_name: "Lee",
+      email: "jordan@acme.example",
+    })
+    const conversation = makeConversationApi()
+    vi.mocked(listConversations).mockResolvedValue(asPage([conversation]))
+    vi.mocked(getConversation).mockResolvedValue(conversation)
+    vi.mocked(listConversationMessages).mockResolvedValue([makeMessageApi()])
+    vi.mocked(listTeamMembers).mockResolvedValue(asPage([first, second]))
+    vi.mocked(updateConversation).mockImplementation(async (_id, payload) =>
+      makeConversationApi({
+        ...conversation,
+        assigned_agent_id:
+          "assigned_agent_id" in payload
+            ? (payload.assigned_agent_id ?? null)
+            : conversation.assigned_agent_id,
+      }),
+    )
+
+    renderWithProviders(<ConversationsInbox />)
+    await openConversationDetail(user)
+
+    const control = await screen.findByLabelText("Assigned agent")
+    await waitFor(() => {
+      expect(screen.getByRole("option", { name: "Sarah Perera" })).toBeInTheDocument()
+    })
+    expect(control).toHaveValue("")
+
+    await user.selectOptions(control, first.id)
+    await waitFor(() => {
+      expect(updateConversation).toHaveBeenCalledWith("conv-1", {
+        assigned_agent_id: first.id,
+      })
+    })
+    expect(await screen.findByLabelText("Assigned agent")).toHaveValue(first.id)
+    expect(screen.getByText(/Agent: Sarah Perera/)).toBeInTheDocument()
+    expect(screen.getByLabelText("Conversation status")).toHaveValue("Open")
+
+    await user.selectOptions(screen.getByLabelText("Assigned agent"), second.id)
+    await waitFor(() => {
+      expect(updateConversation).toHaveBeenCalledWith("conv-1", {
+        assigned_agent_id: second.id,
+      })
+    })
+    expect(screen.getByLabelText("Assigned agent")).toHaveValue(second.id)
+    expect(screen.getByText(/Agent: Jordan Lee/)).toBeInTheDocument()
+
+    await user.selectOptions(screen.getByLabelText("Assigned agent"), "")
+    await waitFor(() => {
+      expect(updateConversation).toHaveBeenCalledWith("conv-1", {
+        assigned_agent_id: null,
+      })
+    })
+    expect(screen.getByLabelText("Assigned agent")).toHaveValue("")
+    expect(screen.getByText(/Agent: Unassigned/)).toBeInTheDocument()
+    expect(screen.getByLabelText("Conversation status")).toHaveValue("Open")
+    expect(updateConversation).not.toHaveBeenCalledWith(
+      "conv-1",
+      expect.objectContaining({ status: expect.anything() }),
+    )
+  })
+
   it("shows a messages error when conversation detail fails to load", async () => {
     const user = userEvent.setup()
     vi.mocked(listConversations).mockResolvedValue(asPage([makeConversationApi()]))
@@ -472,6 +555,7 @@ describe("ConversationsInbox", () => {
 
     expect(await screen.findByText("Elena Park")).toBeInTheDocument()
     expect(screen.getByRole("button", { name: /New/ })).toBeInTheDocument()
+    expect(await screen.findByLabelText("Assigned agent")).toBeInTheDocument()
   })
 
   it("shows linked tickets for the active conversation", async () => {
@@ -487,6 +571,9 @@ describe("ConversationsInbox", () => {
 
     expect(await screen.findByText("Linked tickets")).toBeInTheDocument()
     expect(await screen.findByText("Refund not received")).toBeInTheDocument()
+    expect(
+      screen.getByRole("link", { name: /Refund not received/ }),
+    ).toHaveAttribute("href", "/dashboard/tickets?ticket=tkt-1")
     await waitFor(() => {
       expect(listTickets).toHaveBeenCalledWith(
         expect.objectContaining({ conversationId: "conv-1" }),

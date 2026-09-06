@@ -1,3 +1,5 @@
+import { AxiosError } from "axios"
+import type { InternalAxiosRequestConfig } from "axios"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import userEvent from "@testing-library/user-event"
 import { fireEvent, screen, waitFor, within } from "@testing-library/react"
@@ -15,6 +17,7 @@ import {
   makeConversationApi,
   makeCustomer,
   makeCustomerDetail,
+  makeTicket,
   makeAgentUser,
   asPage,
 } from "@/test/fixtures"
@@ -45,6 +48,22 @@ vi.mock("@/services/tickets", () => ({
 }))
 
 const SEARCH_DEBOUNCE_MS = 300
+
+function apiError(detail: string, status = 400) {
+  return new AxiosError(
+    detail,
+    AxiosError.ERR_BAD_REQUEST,
+    undefined,
+    undefined,
+    {
+      status,
+      statusText: "Bad Request",
+      data: { detail },
+      headers: {},
+      config: { headers: {} } as InternalAxiosRequestConfig,
+    },
+  )
+}
 
 async function flushSearchDebounce() {
   await new Promise((resolve) => {
@@ -299,6 +318,31 @@ describe("CustomersBoard", () => {
     expect(screen.queryByText("Elena Park")).not.toBeInTheDocument()
   })
 
+  it("shows the API error when customer deletion is blocked", async () => {
+    const user = userEvent.setup()
+    vi.mocked(listCustomers).mockResolvedValue(asPage([makeCustomer()]))
+    vi.mocked(deleteCustomer).mockRejectedValue(
+      apiError(
+        "This customer cannot be deleted while tickets are still linked. Reassign or delete those tickets first.",
+        409,
+      ),
+    )
+
+    renderWithProviders(<CustomersBoard />)
+    await screen.findByText("Elena Park")
+    await user.click(screen.getByRole("button", { name: "Delete Elena Park" }))
+    await user.click(screen.getByRole("button", { name: "Delete" }))
+
+    expect(
+      await screen.findByText(
+        "This customer cannot be deleted while tickets are still linked. Reassign or delete those tickets first.",
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("heading", { name: "Delete customer" }),
+    ).toBeInTheDocument()
+  })
+
   it("searches customers through the API", async () => {
     const elena = makeCustomer()
     const noah = makeCustomer({
@@ -370,6 +414,68 @@ describe("CustomersBoard", () => {
         expect.objectContaining({ page: 2, pageSize: 20 }),
       )
     })
+  })
+
+  it("links related tickets to the ticket deep-link", async () => {
+    const user = userEvent.setup()
+    const customer = makeCustomer()
+    vi.mocked(listCustomers).mockResolvedValue(asPage([customer]))
+    vi.mocked(getCustomer).mockResolvedValue(makeCustomerDetail())
+    vi.mocked(listTickets).mockResolvedValue(asPage([makeTicket()]))
+
+    renderWithProviders(<CustomersBoard />)
+    await user.click(await screen.findByRole("button", { name: "View Elena Park" }))
+
+    const dialog = await screen.findByRole("dialog")
+    expect(
+      await within(dialog).findByRole("link", { name: /Refund not received/ }),
+    ).toHaveAttribute("href", "/dashboard/tickets?ticket=tkt-1")
+  })
+
+  it("opens a customer from the workspace-safe query param", async () => {
+    vi.mocked(listCustomers).mockResolvedValue(asPage([]))
+    vi.mocked(getCustomer).mockResolvedValue(
+      makeCustomerDetail({
+        id: "cust-99",
+        first_name: "Noah",
+        last_name: "Diaz",
+        email: "noah@orbit.example",
+      }),
+    )
+
+    renderWithProviders(<CustomersBoard />, {
+      initialEntries: ["/dashboard/customers?customer=cust-99"],
+    })
+
+    const dialog = await screen.findByRole("dialog")
+    expect(
+      await within(dialog).findByRole("heading", { name: "Noah Diaz" }),
+    ).toBeInTheDocument()
+    expect(getCustomer).toHaveBeenCalledWith("cust-99")
+  })
+
+  it("shows a not-found state for a missing or foreign customer query", async () => {
+    vi.mocked(listCustomers).mockResolvedValue(asPage([makeCustomer()]))
+    vi.mocked(getCustomer).mockRejectedValue(apiError("Customer not found.", 404))
+
+    renderWithProviders(<CustomersBoard />, {
+      initialEntries: ["/dashboard/customers?customer=foreign-customer"],
+    })
+
+    expect(await screen.findByText("Elena Park")).toBeInTheDocument()
+    expect(
+      await screen.findByRole("heading", { name: "Customer not found" }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        "This customer is not in your workspace, or it no longer exists.",
+      ),
+    ).toBeInTheDocument()
+    const dialog = screen.getByRole("dialog")
+    expect(
+      within(dialog).queryByRole("heading", { name: "Elena Park" }),
+    ).not.toBeInTheDocument()
+    expect(getCustomer).toHaveBeenCalledWith("foreign-customer")
   })
 
   it("keeps customer workflows available for AGENT", async () => {

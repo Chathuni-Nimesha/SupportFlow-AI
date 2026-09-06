@@ -9,7 +9,7 @@ const steps = [
     step: "01",
     title: "Create a workspace",
     description:
-      "Register with email and password. Your conversations and knowledge stay scoped to your account.",
+      "Register with email and password. Conversations, tickets, customers, and knowledge stay scoped to the selected workspace.",
     icon: UserRound,
   },
   {

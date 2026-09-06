@@ -18,7 +18,7 @@ This repository is a production-oriented AI customer-support workspace. There is
 | AI | RAG answers via Gemini, conversation suggested replies, source citations |
 | Customers | Workspace-scoped customer directory with search, related conversations, and tickets |
 | Tickets | Workspace-scoped tickets with status, priority, customer, and team-member assignment |
-| Team | Workspace membership directory (Owner / Admin / Agent) used for assignment and authorization |
+| Team | Workspace team directory with OWNER / ADMIN / AGENT roles for assignment and knowledge/team management. Directory members cannot sign in |
 | Workspace | Active workspace selection, conversation-derived analytics, account display, light/dark theme |
 | Isolation | Data is scoped to the selected workspace (`workspace_id`), resolved server-side |
 | Health | `GET /health` reports process and MongoDB ping (`connected` / `disconnected`) |
@@ -382,7 +382,7 @@ GitHub Actions (`.github/workflows/ci.yml`) runs backend pytest and frontend Typ
 | AI suggested replies | Working |
 | Conversation-derived analytics | Working |
 | Account display + theme | Working |
-| Owner-scoped data | Compatibility field retained; tenancy is `workspace_id` |
+| `owner_id` compatibility field | Retained as metadata; tenancy is `workspace_id` |
 | Login/register rate limiting | Working |
 | AI / knowledge-search rate limiting | Working — per user and per workspace, in-memory, configurable |
 | List pagination | Working — `page` + `page_size` envelope on conversations, customers, tickets, team, knowledge documents |
@@ -390,7 +390,7 @@ GitHub Actions (`.github/workflows/ci.yml`) runs backend pytest and frontend Typ
 | Conversation assignment | Working — `assigned_agent_id` must be an ACTIVE team member in the current workspace |
 | Tickets | Working — workspace-scoped CRUD, status/priority, assignment to team members |
 | Customers (CRM) | Working — workspace-scoped directory, search, related conversations/tickets |
-| Team management | Working — workspace membership (OWNER/ADMIN/AGENT) |
+| Team management | Working — workspace team directory (OWNER/ADMIN/AGENT). Directory members cannot sign in; email invitations are not sent |
 | Notifications | Unavailable |
 | Global search | Unavailable (MVP scope) |
 | Billing | Unavailable (MVP scope) |
@@ -398,7 +398,7 @@ GitHub Actions (`.github/workflows/ci.yml`) runs backend pytest and frontend Typ
 | Password reset | Unavailable (MVP scope) |
 | Public customer chatbot | Unavailable (MVP scope) |
 
-Sidebar pages for tickets, customers, and team are connected to live workspace-scoped APIs. Team members authenticate as users; the selected workspace membership supplies OWNER/ADMIN/AGENT authorization. Email invitations are not sent.
+Sidebar pages for tickets, customers, and team are connected to live workspace-scoped APIs. Team is a workspace directory used for assignment and OWNER/ADMIN/AGENT authorization. Directory members cannot authenticate or sign in. Email invitations are not sent.
 
 ---
 

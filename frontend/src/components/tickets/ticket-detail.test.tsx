@@ -28,6 +28,9 @@ describe("TicketDetailPanel", () => {
     expect(screen.getByLabelText("Assignee")).toHaveDisplayValue("Unassigned")
     expect(screen.getByText("Linked conversation")).toBeInTheDocument()
     expect(screen.getByText("Not linked")).toBeInTheDocument()
+    expect(
+      screen.getByRole("link", { name: "View customer" }),
+    ).toHaveAttribute("href", "/dashboard/customers?customer=cust-1")
   })
 
   it("links a conversation id to the inbox without changing ticket data", () => {

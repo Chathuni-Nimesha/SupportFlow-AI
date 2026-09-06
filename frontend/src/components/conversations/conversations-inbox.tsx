@@ -120,11 +120,13 @@ export function ConversationsInbox() {
 
   const [listLoading, setListLoading] = useState(true)
   const [listError, setListError] = useState<string | null>(null)
+  const [listTruncated, setListTruncated] = useState(false)
   const [messagesLoading, setMessagesLoading] = useState(false)
   const [messagesError, setMessagesError] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
   const [updatingStatus, setUpdatingStatus] = useState(false)
+  const [updatingAssignee, setUpdatingAssignee] = useState(false)
   const [createValues, setCreateValues] = useState<NewConversationFormValues>(
     emptyNewConversationValues(),
   )
@@ -169,6 +171,7 @@ export function ConversationsInbox() {
       const page = await listConversations({ page: 1, pageSize: 100 })
       const mapped = page.items.map((item) => mapConversationFromApi(item))
       setItems(mapped)
+      setListTruncated(Boolean(page.hasNext))
       setActiveId((current) => {
         if (
           requestedConversationId &&
@@ -186,6 +189,7 @@ export function ConversationsInbox() {
         getApiErrorMessage(error, "Unable to load conversations."),
       )
       setItems([])
+      setListTruncated(false)
       setActiveId(null)
     } finally {
       setListLoading(false)
@@ -221,7 +225,7 @@ export function ConversationsInbox() {
     void listTeamMembers({ page: 1, pageSize: PICKER_PAGE_SIZE })
       .then((page) => {
         if (!cancelled) {
-          setMembers(page.items.filter((member) => member.status === "ACTIVE"))
+          setMembers(page.items)
         }
       })
       .catch(() => {
@@ -448,6 +452,36 @@ export function ConversationsInbox() {
     }
   }
 
+  const handleAssigneeChange = async (assignedAgentId: string | null) => {
+    if (!activeConversation) return
+    const current = activeConversation.assignedAgentId?.trim() || null
+    if (current === assignedAgentId) return
+
+    setUpdatingAssignee(true)
+    setSendError(null)
+    try {
+      const updated = await updateConversation(activeConversation.id, {
+        assigned_agent_id: assignedAgentId,
+      })
+      setItems((currentItems) =>
+        currentItems.map((item) =>
+          item.id === activeConversation.id
+            ? {
+                ...mergeConversationUpdate(item, updated),
+                messages: item.messages,
+              }
+            : item,
+        ),
+      )
+    } catch (error) {
+      setSendError(
+        getApiErrorMessage(error, "Unable to update conversation agent."),
+      )
+    } finally {
+      setUpdatingAssignee(false)
+    }
+  }
+
   const openTicketCreate = () => {
     if (!activeConversation) return
     setTicketValues(
@@ -553,6 +587,15 @@ export function ConversationsInbox() {
         </div>
       ) : null}
 
+      {listTruncated ? (
+        <div
+          className="border-b border-border/70 bg-muted/40 px-4 py-2 text-xs text-muted-foreground"
+          role="status"
+        >
+          Showing the first 100 conversations. Pagination is coming soon.
+        </div>
+      ) : null}
+
       <div className="flex min-h-0 flex-1">
         <div className="hidden h-full w-60 shrink-0 xl:block 2xl:w-64">
           <ConversationFilters
@@ -603,12 +646,16 @@ export function ConversationsInbox() {
                 onDraftChange={setDraft}
                 onSend={handleSend}
                 onStatusChange={handleStatusChange}
+                onAssigneeChange={handleAssigneeChange}
                 onBack={() => setMobileView("list")}
                 isMessagesLoading={messagesLoading}
                 messagesError={messagesError}
                 sendError={sendError}
                 isSending={sending}
                 isUpdatingStatus={updatingStatus}
+                isUpdatingAssignee={updatingAssignee}
+                members={members}
+                membersLoading={membersLoading}
                 linkedTickets={linkedTickets}
                 linkedTicketsLoading={linkedTicketsLoading}
                 linkedTicketsError={linkedTicketsError}
@@ -723,7 +770,7 @@ export function ConversationsInbox() {
             customers={customers}
             customersLoading={customersLoading}
             conversations={ticketConversationOptions}
-            members={members}
+            members={members.filter((member) => member.status === "ACTIVE")}
             membersLoading={membersLoading}
             isSaving={isCreatingTicket}
             error={ticketError}

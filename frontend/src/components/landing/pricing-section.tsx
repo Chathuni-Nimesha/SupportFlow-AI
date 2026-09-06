@@ -28,8 +28,8 @@ const plans = [
       "Knowledge Base CRUD and publishing",
       "Semantic knowledge search",
       "AI-assisted suggested replies",
-      "RAG-powered answers",
-      "Owner-scoped workspace",
+      "Knowledge-grounded Gemini answers",
+      "Workspace-scoped data isolation",
     ],
     cta: "Get Started",
     href: "/register",
@@ -41,7 +41,7 @@ const plans = [
     price: "Coming soon",
     period: "",
     description:
-      "Email invitations, shared inboxes, and teammate login are not available in this version.",
+      "A workspace team directory with OWNER, ADMIN, and AGENT roles is available now. Email invitations and teammate login are not included in this version.",
     features: [
       "Team member directory (available now in the workspace)",
       "Invitations and member login",

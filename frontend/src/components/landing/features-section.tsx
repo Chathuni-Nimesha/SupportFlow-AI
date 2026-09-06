@@ -1,5 +1,12 @@
 import { motion } from "framer-motion"
-import { BookOpen, Bot, MessageSquare } from "lucide-react"
+import {
+  BookOpen,
+  Bot,
+  MessageSquare,
+  Shield,
+  Ticket,
+  Users,
+} from "lucide-react"
 
 import { fadeUp, staggerContainer } from "@/components/landing/motion"
 import { SectionHeading } from "@/components/landing/section-heading"
@@ -13,25 +20,50 @@ import {
 
 const features = [
   {
-    title: "Conversations",
+    title: "AI assistance",
     description:
-      "Keep customer threads in one inbox. Create conversations, send replies, and update status as work moves forward.",
-    icon: MessageSquare,
-    points: ["Messages and status", "AI-assisted drafts", "Owner-scoped inbox"],
+      "Generate knowledge-grounded Gemini answers and suggested replies. Agents review every draft before anything is sent.",
+    icon: Bot,
+    points: ["RAG-powered answers", "Suggested replies", "Source citations"],
   },
   {
     title: "Knowledge Base",
     description:
       "Write, publish, and embed support documents. Semantic search retrieves the right chunks for agents and the AI assistant.",
     icon: BookOpen,
-    points: ["CRUD and publishing", "Chroma embeddings", "Source citations"],
+    points: ["CRUD and publishing", "Chroma embeddings", "Published-only retrieval"],
   },
   {
-    title: "AI Assistant",
+    title: "Conversations",
     description:
-      "Ask questions or generate suggested replies grounded in published knowledge. Agents review the draft before anything is sent.",
-    icon: Bot,
-    points: ["RAG-powered answers", "Suggested replies", "No invented policy"],
+      "Keep customer threads in one inbox. Create conversations, send replies, and update status as work moves forward.",
+    icon: MessageSquare,
+    points: ["Messages and status", "AI-assisted drafts", "Workspace-scoped inbox"],
+  },
+  {
+    title: "Tickets",
+    description:
+      "Track follow-up work with status, priority, and assignment to active workspace teammates.",
+    icon: Ticket,
+    points: ["Lifecycle and assignment", "Customer required", "Optional conversation link"],
+  },
+  {
+    title: "Customers",
+    description:
+      "Maintain a workspace customer directory and see related conversations and tickets in one place.",
+    icon: Users,
+    points: ["Searchable directory", "Related threads", "Related tickets"],
+  },
+  {
+    title: "Team and workspace",
+    description:
+      "Switch workspaces, isolate data by workspace, and manage a team directory with OWNER, ADMIN, and AGENT roles.",
+    icon: Shield,
+    points: [
+      "Workspace data isolation",
+      "Role-based management",
+      "Directory for assignment, not login",
+    ],
   },
 ]
 
@@ -47,7 +79,7 @@ export function FeaturesSection() {
           id="features-heading"
           eyebrow="Features"
           title="What the workspace actually includes"
-          description="Built for support agents: conversations, knowledge, and retrieval-augmented assistance in one secure product."
+          description="Built for support agents: conversations, tickets, customers, knowledge, and retrieval-augmented assistance in one workspace-scoped product."
         />
 
         <motion.div
@@ -55,7 +87,7 @@ export function FeaturesSection() {
           initial="hidden"
           whileInView="visible"
           viewport={{ once: true, amount: 0.2 }}
-          className="mt-14 grid gap-6 md:grid-cols-3"
+          className="mt-14 grid gap-6 md:grid-cols-2 lg:grid-cols-3"
         >
           {features.map((feature) => {
             const Icon = feature.icon

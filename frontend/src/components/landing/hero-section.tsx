@@ -17,9 +17,9 @@ const chatMessages = [
 ]
 
 const capabilities = [
-  { label: "Knowledge-grounded answers", value: "RAG", icon: BookOpen },
+  { label: "Knowledge-grounded Gemini answers", value: "RAG", icon: BookOpen },
   { label: "Suggested replies for agents", value: "Assist", icon: Sparkles },
-  { label: "Owner-scoped workspace", value: "Secure", icon: MessageSquare },
+  { label: "Workspace-scoped isolation", value: "Secure", icon: MessageSquare },
 ]
 
 export function HeroSection() {
@@ -56,9 +56,10 @@ export function HeroSection() {
             variants={fadeUp}
             className="mt-5 max-w-lg text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg"
           >
-            Help agents work faster with centralized conversations, a published
-            knowledge base, and retrieval-augmented suggestions they can review
-            before sending.
+            Help agents work faster with workspace-scoped conversations,
+            tickets, customers, a published knowledge base, and
+            retrieval-augmented Gemini suggestions they can review before
+            sending.
           </motion.p>
           <motion.div
             variants={fadeUp}

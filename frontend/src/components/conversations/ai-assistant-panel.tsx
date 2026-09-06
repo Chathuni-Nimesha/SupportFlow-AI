@@ -1,17 +1,10 @@
 import { useEffect, useState } from "react"
 import { motion } from "framer-motion"
-import {
-  BookOpen,
-  Gauge,
-  HeartPulse,
-  Loader2,
-  Sparkles,
-} from "lucide-react"
+import { BookOpen, Loader2, Sparkles } from "lucide-react"
 
 import type { Conversation } from "@/data/conversations"
 import type { ConversationAiSuggestion } from "@/types/conversations"
 import { suggestConversationReply } from "@/services/conversation-ai"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
@@ -241,37 +234,6 @@ export function AiAssistantPanel({
               </ul>
             ) : null}
           </motion.section>
-
-          <section className="grid gap-3">
-            <div className="rounded-2xl border border-border/70 bg-background p-4">
-              <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground">
-                <HeartPulse className="size-4 text-primary" aria-hidden />
-                Customer sentiment
-              </div>
-              <Badge
-                variant="secondary"
-                className="rounded-full border-0 bg-slate-100 text-slate-700 dark:bg-slate-500/15 dark:text-slate-300"
-              >
-                Not analyzed yet
-              </Badge>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Sentiment analysis is not available yet (UI placeholder).
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-border/70 bg-background p-4">
-              <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground">
-                <Gauge className="size-4 text-primary" aria-hidden />
-                Confidence score
-              </div>
-              <p className="text-sm font-medium text-muted-foreground">
-                Not available
-              </p>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Confidence scoring is not provided by the backend yet.
-              </p>
-            </div>
-          </section>
         </div>
       </ScrollArea>
 

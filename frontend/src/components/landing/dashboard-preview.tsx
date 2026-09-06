@@ -60,7 +60,7 @@ export function DashboardPreview() {
               </div>
               <div className="flex items-center gap-2 rounded-2xl border border-border bg-white px-3 py-2 text-sm text-muted-foreground">
                 <Shield className="size-4 text-primary" aria-hidden />
-                Owner-scoped · signed in
+                Workspace-scoped · signed in
               </div>
             </div>
 

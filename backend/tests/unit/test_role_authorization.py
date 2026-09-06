@@ -597,6 +597,20 @@ async def test_agent_can_use_ticket_conversation_customer_and_ai(
     assert conversation.status_code == 201
     conversation_id = conversation.json()["id"]
 
+    listed_team = await client.get("/api/v1/team", headers=agent_headers)
+    assert listed_team.status_code == 200
+    agent_member = next(
+        item for item in listed_team.json()["items"] if item["role"] == "AGENT"
+    )
+    assigned = await client.patch(
+        f"/api/v1/conversations/{conversation_id}",
+        headers=agent_headers,
+        json={"assigned_agent_id": agent_member["id"]},
+    )
+    assert assigned.status_code == 200
+    assert assigned.json()["assigned_agent_id"] == agent_member["id"]
+    assert assigned.json()["status"] == "Open"
+
     messages = await client.get(
         f"/api/v1/conversations/{conversation_id}/messages",
         headers=agent_headers,

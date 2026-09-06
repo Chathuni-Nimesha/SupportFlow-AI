@@ -4,8 +4,8 @@ import {
   BookOpen,
   Bot,
   MessageSquarePlus,
-  BarChart3,
-  Search,
+  Ticket,
+  Users,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 
@@ -32,6 +32,18 @@ const actions: QuickAction[] = [
     icon: MessageSquarePlus,
   },
   {
+    label: "Open tickets",
+    description: "Triage and assign workspace tickets",
+    href: "/dashboard/tickets",
+    icon: Ticket,
+  },
+  {
+    label: "View customers",
+    description: "Open the workspace customer directory",
+    href: "/dashboard/customers",
+    icon: Users,
+  },
+  {
     label: "Open Knowledge Base",
     description: "Create and publish support documents",
     href: "/dashboard/knowledge-base",
@@ -42,18 +54,6 @@ const actions: QuickAction[] = [
     description: "Get a knowledge-grounded answer",
     href: "/dashboard/ai-assistant",
     icon: Bot,
-  },
-  {
-    label: "Semantic search",
-    description: "Find published knowledge chunks",
-    href: "/dashboard/knowledge-base",
-    icon: Search,
-  },
-  {
-    label: "View analytics",
-    description: "See conversation counts from your inbox",
-    href: "/dashboard/analytics",
-    icon: BarChart3,
   },
 ]
 

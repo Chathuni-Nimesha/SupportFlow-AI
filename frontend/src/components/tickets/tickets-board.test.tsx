@@ -232,7 +232,7 @@ describe("TicketsBoard", () => {
     expect(within(dialog).getByText("Not linked")).toBeInTheDocument()
     expect(
       within(dialog).getByRole("link", { name: "View customer" }),
-    ).toHaveAttribute("href", "/dashboard/customers")
+    ).toHaveAttribute("href", "/dashboard/customers?customer=cust-1")
   })
 
   it("populates the edit form and saves changes", async () => {
@@ -513,6 +513,46 @@ describe("TicketsBoard", () => {
         "Assignee is not an active team member.",
       ),
     ).toBeInTheDocument()
+  })
+
+  it("opens a ticket from the workspace-safe query param", async () => {
+    const ticket = makeTicket({ id: "tkt-99", title: "Deep linked refund" })
+    vi.mocked(listTickets).mockResolvedValue(asPage([]))
+    vi.mocked(getTicket).mockResolvedValue(ticket)
+
+    renderWithProviders(<TicketsBoard />, {
+      initialEntries: ["/dashboard/tickets?ticket=tkt-99"],
+    })
+
+    const dialog = await screen.findByRole("dialog")
+    expect(
+      await within(dialog).findByRole("heading", { name: "Deep linked refund" }),
+    ).toBeInTheDocument()
+    expect(getTicket).toHaveBeenCalledWith("tkt-99")
+  })
+
+  it("shows a not-found state for a missing or foreign ticket query", async () => {
+    vi.mocked(listTickets).mockResolvedValue(asPage([makeTicket()]))
+    vi.mocked(getTicket).mockRejectedValue(apiError("Ticket not found.", 404))
+
+    renderWithProviders(<TicketsBoard />, {
+      initialEntries: ["/dashboard/tickets?ticket=foreign-ticket"],
+    })
+
+    expect(await screen.findByText("Refund not received")).toBeInTheDocument()
+    expect(
+      await screen.findByRole("heading", { name: "Ticket not found" }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        "This ticket is not in your workspace, or it no longer exists.",
+      ),
+    ).toBeInTheDocument()
+    const dialog = screen.getByRole("dialog")
+    expect(
+      within(dialog).queryByRole("heading", { name: "Refund not received" }),
+    ).not.toBeInTheDocument()
+    expect(getTicket).toHaveBeenCalledWith("foreign-ticket")
   })
 
   it("keeps ticket workflows available for AGENT", async () => {

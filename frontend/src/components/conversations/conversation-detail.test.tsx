@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from "vitest"
+import userEvent from "@testing-library/user-event"
 import { screen } from "@testing-library/react"
 
 import { ConversationDetail } from "@/components/conversations/conversation-detail"
-import { makeConversation, makeTicket, makeUiMessage } from "@/test/fixtures"
+import { makeConversation, makeTeamMember, makeTicket, makeUiMessage } from "@/test/fixtures"
 import { renderWithProviders } from "@/test/test-utils"
 
 describe("ConversationDetail", () => {
@@ -42,6 +43,39 @@ describe("ConversationDetail", () => {
     expect(screen.getByText(/Agent: Unassigned/)).toBeInTheDocument()
   })
 
+  it("hides the reply composer when the conversation is closed", () => {
+    renderWithProviders(
+      <ConversationDetail
+        conversation={makeConversation({
+          status: "Closed",
+          messages: [makeUiMessage()],
+        })}
+        draft=""
+        onDraftChange={vi.fn()}
+        onSend={vi.fn()}
+      />,
+    )
+
+    expect(screen.queryByLabelText("Reply message")).not.toBeInTheDocument()
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "This conversation is closed",
+    )
+  })
+
+  it("hides the reply composer when the conversation is AI Resolved", () => {
+    renderWithProviders(
+      <ConversationDetail
+        conversation={makeConversation({ status: "AI Resolved" })}
+        draft=""
+        onDraftChange={vi.fn()}
+        onSend={vi.fn()}
+      />,
+    )
+
+    expect(screen.queryByLabelText("Reply message")).not.toBeInTheDocument()
+    expect(screen.getByRole("status")).toHaveTextContent("AI Resolved")
+  })
+
   it("shows linked tickets and a create action", () => {
     renderWithProviders(
       <ConversationDetail
@@ -63,7 +97,7 @@ describe("ConversationDetail", () => {
     ).toBeInTheDocument()
     expect(
       screen.getByRole("link", { name: /Refund not received/ }),
-    ).toHaveAttribute("href", "/dashboard/tickets")
+    ).toHaveAttribute("href", "/dashboard/tickets?ticket=tkt-1")
     expect(
       screen.getByText(/Ticket assignees stay independent/),
     ).toBeInTheDocument()
@@ -81,9 +115,8 @@ describe("ConversationDetail", () => {
       />,
     )
 
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Linked tickets are still open",
-    )
+    expect(screen.getByText(/Linked tickets are still open/)).toBeInTheDocument()
+    expect(screen.queryByLabelText("Reply message")).not.toBeInTheDocument()
   })
 
   it("warns when linked tickets are resolved but the conversation is still open", () => {
@@ -131,5 +164,50 @@ describe("ConversationDetail", () => {
     )
 
     expect(screen.getByText("Loading messages…")).toBeInTheDocument()
+  })
+
+  it("lets the user assign and unassign an agent", async () => {
+    const onAssigneeChange = vi.fn()
+    const { rerender } = renderWithProviders(
+      <ConversationDetail
+        conversation={makeConversation()}
+        draft=""
+        onDraftChange={vi.fn()}
+        onSend={vi.fn()}
+        onAssigneeChange={onAssigneeChange}
+        members={[makeTeamMember()]}
+        assignedAgentLabel="Unassigned"
+      />,
+    )
+
+    expect(screen.getByLabelText("Assigned agent")).toHaveValue("")
+    expect(screen.getByText(/Agent: Unassigned/)).toBeInTheDocument()
+
+    await userEvent.setup().selectOptions(
+      screen.getByLabelText("Assigned agent"),
+      "member-1",
+    )
+    expect(onAssigneeChange).toHaveBeenCalledWith("member-1")
+
+    rerender(
+      <ConversationDetail
+        conversation={makeConversation({ assignedAgentId: "member-1" })}
+        draft=""
+        onDraftChange={vi.fn()}
+        onSend={vi.fn()}
+        onAssigneeChange={onAssigneeChange}
+        members={[makeTeamMember()]}
+        assignedAgentLabel="Sarah Perera"
+      />,
+    )
+
+    expect(screen.getByLabelText("Assigned agent")).toHaveValue("member-1")
+    expect(screen.getByText(/Agent: Sarah Perera/)).toBeInTheDocument()
+
+    await userEvent.setup().selectOptions(
+      screen.getByLabelText("Assigned agent"),
+      "",
+    )
+    expect(onAssigneeChange).toHaveBeenCalledWith(null)
   })
 })

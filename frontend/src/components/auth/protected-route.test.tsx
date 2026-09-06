@@ -68,7 +68,7 @@ describe("ProtectedRoute", () => {
       expect(screen.getByLabelText("Email")).toBeInTheDocument()
       expect(
         screen.queryByText(
-          "Review conversations and knowledge in your workspace.",
+          "Review conversations, tickets, and knowledge in your workspace.",
         ),
       ).not.toBeInTheDocument()
     },
@@ -85,7 +85,7 @@ describe("ProtectedRoute", () => {
     ).toBeInTheDocument()
     expect(
       screen.getByText(
-        "Review conversations and knowledge in your workspace.",
+        "Review conversations, tickets, and knowledge in your workspace.",
       ),
     ).toBeInTheDocument()
     expect(
@@ -107,7 +107,7 @@ describe("ProtectedRoute", () => {
     ).toBeInTheDocument()
     expect(
       screen.queryByText(
-        "Review conversations and knowledge in your workspace.",
+        "Review conversations, tickets, and knowledge in your workspace.",
       ),
     ).not.toBeInTheDocument()
     expect(
@@ -140,7 +140,7 @@ describe("ProtectedRoute", () => {
     expect(localStorage.getItem("access_token")).toBeNull()
     expect(
       screen.queryByText(
-        "Review conversations and knowledge in your workspace.",
+        "Review conversations, tickets, and knowledge in your workspace.",
       ),
     ).not.toBeInTheDocument()
   })
@@ -159,7 +159,7 @@ describe("ProtectedRoute", () => {
     expect(localStorage.getItem("access_token")).toBe("test-token")
     expect(
       screen.queryByText(
-        "Review conversations and knowledge in your workspace.",
+        "Review conversations, tickets, and knowledge in your workspace.",
       ),
     ).not.toBeInTheDocument()
   })

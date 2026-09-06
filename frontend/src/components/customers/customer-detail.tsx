@@ -63,7 +63,8 @@ export function CustomerDetailPanel({
               <p className="mt-1 text-xs text-muted-foreground">
                 Linked in this workspace by customer. Unlinked older
                 conversations still match by email. Conversations are not
-                deleted when a customer is removed.
+                deleted when a customer is removed; the customer link is
+                dropped if deletion is allowed.
               </p>
             </div>
             {customer.conversations.length === 0 ? (
@@ -167,17 +168,19 @@ function RelatedTickets({ customerId }: { customerId: string }) {
       ) : tickets.length ? (
         <ul className="space-y-2">
           {tickets.map((ticket) => (
-            <li
-              key={ticket.id}
-              className="rounded-2xl border border-border/70 bg-background px-3.5 py-3"
-            >
-              <p className="text-sm font-medium text-foreground">
-                {ticket.title}
-              </p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                {TICKET_STATUS_LABELS[ticket.status]} ·{" "}
-                {TICKET_PRIORITY_LABELS[ticket.priority]}
-              </p>
+            <li key={ticket.id}>
+              <Link
+                to={`/dashboard/tickets?ticket=${encodeURIComponent(ticket.id)}`}
+                className="block rounded-2xl border border-border/70 bg-background px-3.5 py-3 hover:bg-muted/40"
+              >
+                <p className="text-sm font-medium text-foreground">
+                  {ticket.title}
+                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {TICKET_STATUS_LABELS[ticket.status]} ·{" "}
+                  {TICKET_PRIORITY_LABELS[ticket.priority]}
+                </p>
+              </Link>
             </li>
           ))}
         </ul>

@@ -23,7 +23,7 @@ const floatingCards = [
     className: "right-4 top-28 sm:right-10 sm:top-32",
   },
   {
-    title: "Owner-scoped",
+    title: "Workspace-scoped",
     value: "Secure",
     icon: MessageSquare,
     className: "bottom-10 left-6 sm:bottom-16 sm:left-12",
