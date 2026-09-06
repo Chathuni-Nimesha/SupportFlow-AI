@@ -45,7 +45,7 @@ const actions: QuickAction[] = [
   },
   {
     label: "Open Knowledge Base",
-    description: "Create and publish support documents",
+    description: "Browse published support documents",
     href: "/dashboard/knowledge-base",
     icon: BookOpen,
   },

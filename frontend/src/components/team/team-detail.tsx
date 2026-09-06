@@ -24,7 +24,7 @@ export function TeamDetailPanel({
   onClose,
   onDisable,
   onDelete,
-  canManage = true,
+  canManage = false,
 }: TeamDetailPanelProps) {
   const name = teamMemberDisplayName(member)
   const owner = isWorkspaceOwner(member)

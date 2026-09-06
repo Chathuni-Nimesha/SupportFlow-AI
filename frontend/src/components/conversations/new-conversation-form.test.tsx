@@ -114,8 +114,11 @@ describe("NewConversationForm", () => {
     expect(screen.getByLabelText("Subject")).toBeRequired()
     expect(screen.getByLabelText("Initial customer message")).toBeRequired()
     expect(screen.getByText("Customer name is required.")).toBeInTheDocument()
+    expect(screen.getByLabelText("Channel")).toBeInTheDocument()
     expect(
-      screen.getByLabelText("Existing customer (optional)"),
+      screen.getByText(
+        "Channel is a label on this thread. Email and Slack are not connected as inboxes.",
+      ),
     ).toBeInTheDocument()
 
     await user.type(screen.getByLabelText("Customer name"), "Elena")

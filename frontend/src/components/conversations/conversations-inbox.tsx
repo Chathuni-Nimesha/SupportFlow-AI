@@ -592,7 +592,8 @@ export function ConversationsInbox() {
           className="border-b border-border/70 bg-muted/40 px-4 py-2 text-xs text-muted-foreground"
           role="status"
         >
-          Showing the first 100 conversations. Pagination is coming soon.
+          Showing the first 100 conversations in this workspace. Older threads
+          are not loaded yet.
         </div>
       ) : null}
 

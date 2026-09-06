@@ -32,7 +32,7 @@ export function KnowledgeDocumentDetail({
   onIngest,
   isIngesting = false,
   ingestError = null,
-  canManage = true,
+  canManage = false,
 }: KnowledgeDocumentDetailProps) {
   return (
     <div className="flex h-full flex-col">

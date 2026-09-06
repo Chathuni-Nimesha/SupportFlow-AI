@@ -32,6 +32,27 @@ describe("KnowledgeDocumentList", () => {
     )
 
     expect(screen.getByText("No knowledge documents yet")).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        "Published documents in this workspace appear here. Ask an owner or admin to add one.",
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it("tells managers they can create the first document", () => {
+    renderWithProviders(
+      <KnowledgeDocumentList
+        documents={[]}
+        canManage
+        onView={vi.fn()}
+        onEdit={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    )
+
+    expect(
+      screen.getByText("Create your first document to power future AI answers."),
+    ).toBeInTheDocument()
   })
 
   it("shows an error with retry", async () => {
@@ -77,5 +98,6 @@ describe("KnowledgeDocumentList", () => {
       screen.getByText("Customers may request a refund within 14 days of purchase."),
     ).toBeInTheDocument()
     expect(screen.getByRole("button", { name: /View/ })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /Edit/ })).not.toBeInTheDocument()
   })
 })

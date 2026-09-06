@@ -41,4 +41,19 @@ describe("getApiErrorMessage", () => {
       "Invalid status. Must be one of: OPEN, IN_PROGRESS, PENDING, RESOLVED, CLOSED.",
     )
   })
+
+  it("uses the fallback instead of raw Axios transport messages", () => {
+    const network = new AxiosError("Network Error")
+    expect(
+      getApiErrorMessage(network, "Unable to load conversations."),
+    ).toBe("Unable to load conversations.")
+
+    const status = new AxiosError(
+      "Request failed with status code 500",
+      AxiosError.ERR_BAD_RESPONSE,
+    )
+    expect(
+      getApiErrorMessage(status, "Unable to load tickets."),
+    ).toBe("Unable to load tickets.")
+  })
 })

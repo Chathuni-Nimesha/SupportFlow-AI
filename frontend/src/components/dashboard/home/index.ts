@@ -1,6 +1,3 @@
-export { ActivityTimeline } from "@/components/dashboard/home/activity-timeline"
-export { AiPerformanceOverview } from "@/components/dashboard/home/ai-performance-overview"
-export { AiSummaryCard } from "@/components/dashboard/home/ai-summary-card"
 export { KpiCard } from "@/components/dashboard/home/kpi-card"
 export { KpiCards } from "@/components/dashboard/home/kpi-cards"
 export { QuickActions } from "@/components/dashboard/home/quick-actions"
