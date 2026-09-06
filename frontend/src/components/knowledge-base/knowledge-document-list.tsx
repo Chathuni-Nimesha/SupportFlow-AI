@@ -36,7 +36,7 @@ export function KnowledgeDocumentList({
   onEdit,
   onDelete,
   deletingId = null,
-  canManage = true,
+  canManage = false,
 }: KnowledgeDocumentListProps) {
   if (isLoading) {
     return (
@@ -78,7 +78,9 @@ export function KnowledgeDocumentList({
           No knowledge documents yet
         </p>
         <p className="mt-1 text-xs text-muted-foreground">
-          Create your first document to power future AI answers.
+          {canManage
+            ? "Create your first document to power future AI answers."
+            : "Published documents in this workspace appear here. Ask an owner or admin to add one."}
         </p>
       </div>
     )

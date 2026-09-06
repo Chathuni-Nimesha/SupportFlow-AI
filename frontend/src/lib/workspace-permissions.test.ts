@@ -14,6 +14,7 @@ import {
   currentWorkspace,
   currentWorkspaceId,
   currentWorkspaceRole,
+  type WorkspaceMemberRole,
 } from "@/lib/workspace-permissions"
 
 describe("workspace permissions", () => {
@@ -72,5 +73,13 @@ describe("workspace permissions", () => {
     expect(canManageTeam(null)).toBe(false)
     expect(canManageKnowledge(undefined)).toBe(false)
     expect(canManageWorkspace(makeAuthUser({ workspaces: [] }))).toBe(false)
+    const unknownRole = makeAuthUser({
+      workspaces: [
+        makeWorkspaceSummary({
+          role: "SUPERADMIN" as WorkspaceMemberRole,
+        }),
+      ],
+    })
+    expect(canManageWorkspace(unknownRole)).toBe(false)
   })
 })

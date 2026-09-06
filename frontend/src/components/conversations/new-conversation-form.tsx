@@ -208,6 +208,10 @@ export function NewConversationForm({
               </option>
             ))}
           </select>
+          <p className="text-[11px] text-muted-foreground">
+            Channel is a label on this thread. Email and Slack are not
+            connected as inboxes.
+          </p>
         </div>
 
         <div className="space-y-2">

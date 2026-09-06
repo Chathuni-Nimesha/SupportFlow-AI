@@ -328,13 +328,14 @@ This is the MVP path reviewers should follow.
 7. Use **Semantic knowledge search** with a query that matches the document.
 8. Open **Conversations**.
 9. **Create** a conversation with an initial customer message that the knowledge can answer (for example “What is your refund window?”).
-10. Open the **AI suggestions** panel and generate a suggestion.
-11. **Review** the draft and cited sources. The AI does not send it for you.
-12. **Use suggestion** (or edit), then **send** as the agent.
-13. Open **AI Assistant**.
-14. Ask a question that the published document can answer.
-15. Show the **answer and sources**. If Chroma is empty or the doc is still Draft, you should see the insufficient-knowledge message instead of invented policy.
-16. Open **Analytics** and show **conversation counts** derived from the real inbox (not tickets or CSAT).
+10. Assign an agent, optionally **create a ticket** from the thread, and open the linked ticket from the conversation.
+11. Open the **AI suggestions** panel and generate a suggestion.
+12. **Review** the draft and cited sources. The AI does not send it for you.
+13. **Use suggestion** (or edit), then **send** as the agent.
+14. Open **AI Assistant**.
+15. Ask a question that the published document can answer.
+16. Show the **answer and sources**. If Chroma is empty or the doc is still Draft, you should see the insufficient-knowledge message instead of invented policy.
+17. Open **Analytics** and show **conversation counts** derived from the real inbox (not tickets or CSAT).
 
 ---
 
@@ -385,15 +386,18 @@ GitHub Actions (`.github/workflows/ci.yml`) runs backend pytest and frontend Typ
 | `owner_id` compatibility field | Retained as metadata; tenancy is `workspace_id` |
 | Login/register rate limiting | Working |
 | AI / knowledge-search rate limiting | Working — per user and per workspace, in-memory, configurable |
-| List pagination | Working — `page` + `page_size` envelope on conversations, customers, tickets, team, knowledge documents |
+| List pagination | Working — `page` + `page_size` envelope on conversations, customers, tickets, team, knowledge documents. The conversation inbox UI still loads the first 100 threads |
 | Health check | Working — `GET /health` |
 | Conversation assignment | Working — `assigned_agent_id` must be an ACTIVE team member in the current workspace |
+| Ticket and customer deep-links | Working — `/dashboard/tickets?ticket=` and `/dashboard/customers?customer=` |
 | Tickets | Working — workspace-scoped CRUD, status/priority, assignment to team members |
 | Customers (CRM) | Working — workspace-scoped directory, search, related conversations/tickets |
+| Customer deletion | Working — blocked while tickets remain; conversations unlink and keep name/email snapshots |
 | Team management | Working — workspace team directory (OWNER/ADMIN/AGENT). Directory members cannot sign in; email invitations are not sent |
 | Notifications | Unavailable |
 | Global search | Unavailable (MVP scope) |
 | Billing | Unavailable (MVP scope) |
+| SSO | Unavailable (MVP scope) |
 | Google OAuth | Unavailable (MVP scope) |
 | Password reset | Unavailable (MVP scope) |
 | Public customer chatbot | Unavailable (MVP scope) |
@@ -430,6 +434,8 @@ Not claimed: httpOnly cookie sessions, CSRF tokens, CSP, SSO, distributed rate l
 - JWT is stored in the browser (`localStorage`).
 - Auth and AI/search rate limiting is **per Uvicorn process**, not shared across workers.
 - Conversation **messages** are not paginated (a thread is loaded as a unit; lists of conversations/customers/tickets/team/knowledge documents are).
+- The conversation **inbox UI** loads the first 100 threads. Extra pages exist on the API but are not shown there.
+- Customers with tickets cannot be deleted until those tickets are reassigned or removed. Conversations are unlinked, not deleted.
 - No production deploy config is shipped beyond environment flags.
 - Automated tests are unit-level (mocked DB / ephemeral Chroma). There is no E2E suite against real MongoDB + Chroma + Gemini.
 

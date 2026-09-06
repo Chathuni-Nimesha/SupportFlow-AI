@@ -1,5 +1,15 @@
 import { isAxiosError } from "axios"
 
+function isGenericAxiosMessage(message: string): boolean {
+  const trimmed = message.trim()
+  if (!trimmed) return true
+  return (
+    /^network error$/i.test(trimmed) ||
+    /^timeout of \d+ms exceeded$/i.test(trimmed) ||
+    /^request failed with status code \d+$/i.test(trimmed)
+  )
+}
+
 export function getApiErrorMessage(
   error: unknown,
   fallback = "Something went wrong. Please try again.",
@@ -18,12 +28,10 @@ export function getApiErrorMessage(
       }
     }
 
-    if (error.message) {
-      return error.message
-    }
+    return fallback
   }
 
-  if (error instanceof Error && error.message) {
+  if (error instanceof Error && error.message && !isGenericAxiosMessage(error.message)) {
     return error.message
   }
 

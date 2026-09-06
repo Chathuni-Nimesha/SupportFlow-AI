@@ -126,7 +126,7 @@ describe("ConversationsInbox", () => {
 
     expect(
       await screen.findByText(
-        "Showing the first 100 conversations. Pagination is coming soon.",
+        "Showing the first 100 conversations in this workspace. Older threads are not loaded yet.",
       ),
     ).toBeInTheDocument()
   })

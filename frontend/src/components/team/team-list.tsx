@@ -38,7 +38,7 @@ export function TeamList({
   onDelete,
   disablingId = null,
   deletingId = null,
-  canManage = true,
+  canManage = false,
 }: TeamListProps) {
   if (isLoading) {
     return (
@@ -85,7 +85,9 @@ export function TeamList({
         <p className="mt-1 text-xs text-muted-foreground">
           {isFiltered
             ? "Try a different name, email, role, or status."
-            : "Add an agent or admin to this workspace directory."}
+            : canManage
+              ? "Add an agent or admin to this workspace directory."
+              : "Workspace members appear here. Ask an owner or admin to add someone."}
         </p>
       </div>
     )
