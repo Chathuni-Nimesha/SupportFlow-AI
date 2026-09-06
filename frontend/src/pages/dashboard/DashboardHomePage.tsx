@@ -1,9 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 
 import {
-  ActivityTimeline,
-  AiPerformanceOverview,
-  AiSummaryCard,
   KpiCards,
   QuickActions,
   RecentConversationsTable,
@@ -55,11 +52,6 @@ export function DashboardHomePage() {
         ticketsError={openTicketError}
       />
 
-      <div className="grid gap-6 xl:grid-cols-[1.4fr_0.8fr]">
-        <AiPerformanceOverview />
-        <AiSummaryCard />
-      </div>
-
       <div className="grid gap-6 xl:grid-cols-2">
         <RecentConversationsTable
           conversations={conversations}
@@ -75,10 +67,7 @@ export function DashboardHomePage() {
         />
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
-        <ActivityTimeline />
-        <QuickActions />
-      </div>
+      <QuickActions />
     </div>
   )
 }

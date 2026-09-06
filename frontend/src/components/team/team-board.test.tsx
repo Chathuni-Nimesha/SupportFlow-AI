@@ -11,6 +11,7 @@ import {
   updateTeamMember,
 } from "@/services/team"
 import { makeAgentUser, makeOwnerMember, makeTeamMember,
+  sampleUser,
   asPage,
 } from "@/test/fixtures"
 import { deferred, renderWithProviders } from "@/test/test-utils"
@@ -33,6 +34,8 @@ vi.mock("@/services/team", () => ({
 
 describe("TeamBoard", () => {
   beforeEach(() => {
+    localStorage.setItem("access_token", "test-token")
+    vi.mocked(fetchCurrentUser).mockResolvedValue(sampleUser)
     vi.mocked(listTeamMembers).mockReset()
     vi.mocked(getTeamMember).mockReset()
     vi.mocked(createTeamMember).mockReset()

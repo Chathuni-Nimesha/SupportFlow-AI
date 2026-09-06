@@ -23,7 +23,7 @@ const faqs = [
   {
     question: "Who can see my conversations and documents?",
     answer:
-      "Data is scoped to the signed-in account. Other users cannot read your conversations, knowledge, customers, tickets, or team directory. Team members cannot sign in yet, and there is no SSO.",
+      "Data is scoped to the selected workspace. Other workspaces cannot read your conversations, knowledge, customers, tickets, or team directory. Team directory members cannot sign in yet, and there is no SSO.",
   },
   {
     question: "Is there a public customer chat widget?",
@@ -33,7 +33,7 @@ const faqs = [
   {
     question: "Are tickets, team, and billing included?",
     answer:
-      "Customers, tickets, and a team directory are included and scoped to the signed-in owner. Tickets can be assigned to team members. Billing is not included, and team members cannot log in or receive email invitations yet.",
+      "Customers, tickets, and a team directory are included and scoped to the selected workspace. Tickets can be assigned to directory members. Billing is not included, and team directory members cannot log in or receive email invitations yet.",
   },
 ]
 

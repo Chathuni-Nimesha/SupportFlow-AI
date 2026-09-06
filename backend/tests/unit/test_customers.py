@@ -4,8 +4,11 @@ import pytest
 from httpx import AsyncClient
 
 from app.database import mongodb as mongodb_module
+from app.models.conversation import build_conversation_document
 from app.models.customer import build_customer_document
 from app.models.team_member import build_team_member_document
+from app.models.ticket import build_ticket_document
+from app.services.customer_service import CUSTOMER_HAS_LINKED_TICKETS
 
 
 SAMPLE_CUSTOMER = {
@@ -395,6 +398,198 @@ async def test_delete_customer(
         headers=auth_headers,
     )
     assert missing.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_customer_unlinks_workspace_conversations_when_no_tickets(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+) -> None:
+    created = await client.post(
+        "/api/v1/customers",
+        headers=auth_headers,
+        json=SAMPLE_CUSTOMER,
+    )
+    customer_id = created.json()["id"]
+    conversation = await client.post(
+        "/api/v1/conversations",
+        headers=auth_headers,
+        json={
+            "customer_name": "Elena Park",
+            "customer_email": SAMPLE_CUSTOMER["email"],
+            "subject": "Refund window",
+            "channel": "Chat",
+            "status": "Open",
+            "customer_id": customer_id,
+        },
+    )
+    assert conversation.status_code == 201, conversation.text
+    conversation_id = conversation.json()["id"]
+
+    deleted = await client.delete(
+        f"/api/v1/customers/{customer_id}",
+        headers=auth_headers,
+    )
+    assert deleted.status_code == 204
+
+    stored = await client.get(
+        f"/api/v1/conversations/{conversation_id}",
+        headers=auth_headers,
+    )
+    assert stored.status_code == 200
+    body = stored.json()
+    assert body["customer_id"] is None
+    assert body["customer_name"] == "Elena Park"
+    assert body["customer_email"] == SAMPLE_CUSTOMER["email"]
+
+    missing = await client.get(
+        f"/api/v1/customers/{customer_id}",
+        headers=auth_headers,
+    )
+    assert missing.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_customer_blocked_when_tickets_exist(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+) -> None:
+    created = await client.post(
+        "/api/v1/customers",
+        headers=auth_headers,
+        json=SAMPLE_CUSTOMER,
+    )
+    customer_id = created.json()["id"]
+    conversation = await client.post(
+        "/api/v1/conversations",
+        headers=auth_headers,
+        json={
+            "customer_name": "Elena Park",
+            "customer_email": SAMPLE_CUSTOMER["email"],
+            "subject": "Refund window",
+            "channel": "Chat",
+            "status": "Open",
+            "customer_id": customer_id,
+        },
+    )
+    assert conversation.status_code == 201
+    ticket = await client.post(
+        "/api/v1/tickets",
+        headers=auth_headers,
+        json={
+            "title": "Refund not received",
+            "description": "Duplicate charge",
+            "status": "OPEN",
+            "priority": "HIGH",
+            "customer_id": customer_id,
+        },
+    )
+    assert ticket.status_code == 201, ticket.text
+
+    deleted = await client.delete(
+        f"/api/v1/customers/{customer_id}",
+        headers=auth_headers,
+    )
+    assert deleted.status_code == 409
+    assert deleted.json()["detail"] == CUSTOMER_HAS_LINKED_TICKETS
+
+    still_customer = await client.get(
+        f"/api/v1/customers/{customer_id}",
+        headers=auth_headers,
+    )
+    assert still_customer.status_code == 200
+
+    still_ticket = await client.get(
+        f"/api/v1/tickets/{ticket.json()['id']}",
+        headers=auth_headers,
+    )
+    assert still_ticket.status_code == 200
+    assert still_ticket.json()["customer_id"] == customer_id
+
+    still_conversation = await client.get(
+        f"/api/v1/conversations/{conversation.json()['id']}",
+        headers=auth_headers,
+    )
+    assert still_conversation.status_code == 200
+    assert still_conversation.json()["customer_id"] == customer_id
+
+
+@pytest.mark.asyncio
+async def test_delete_customer_does_not_touch_foreign_workspace_records(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    sample_register_payload: dict,
+) -> None:
+    created = await client.post(
+        "/api/v1/customers",
+        headers=auth_headers,
+        json=SAMPLE_CUSTOMER,
+    )
+    customer_id = created.json()["id"]
+    local_conversation = await client.post(
+        "/api/v1/conversations",
+        headers=auth_headers,
+        json={
+            "customer_name": "Elena Park",
+            "customer_email": SAMPLE_CUSTOMER["email"],
+            "subject": "Local thread",
+            "channel": "Chat",
+            "status": "Open",
+            "customer_id": customer_id,
+        },
+    )
+    assert local_conversation.status_code == 201
+
+    other_headers = await _other_headers(
+        client,
+        sample_register_payload,
+        email="other-customer-delete@acme.example",
+    )
+    other = await _me(client, other_headers)
+    db = mongodb_module.get_database()
+    foreign_conversation = build_conversation_document(
+        owner_id=other["id"],
+        workspace_id=other["default_workspace_id"],
+        customer_name="Elena Park",
+        customer_email=SAMPLE_CUSTOMER["email"],
+        subject="Foreign thread",
+        channel="Chat",
+        customer_id=customer_id,
+    )
+    foreign_ticket = build_ticket_document(
+        owner_id=other["id"],
+        workspace_id=other["default_workspace_id"],
+        customer_id=customer_id,
+        title="Foreign ticket",
+        description="Should not be touched.",
+    )
+    await db.conversations.insert_one(foreign_conversation)
+    await db.tickets.insert_one(foreign_ticket)
+
+    deleted = await client.delete(
+        f"/api/v1/customers/{customer_id}",
+        headers=auth_headers,
+    )
+    assert deleted.status_code == 204
+
+    local = await client.get(
+        f"/api/v1/conversations/{local_conversation.json()['id']}",
+        headers=auth_headers,
+    )
+    assert local.status_code == 200
+    assert local.json()["customer_id"] is None
+
+    stored_conversation = await db.conversations.find_one(
+        {"_id": foreign_conversation["_id"]},
+    )
+    assert stored_conversation is not None
+    assert stored_conversation["customer_id"] == customer_id
+    assert stored_conversation["workspace_id"] == other["default_workspace_id"]
+
+    stored_ticket = await db.tickets.find_one({"_id": foreign_ticket["_id"]})
+    assert stored_ticket is not None
+    assert stored_ticket["customer_id"] == customer_id
+    assert stored_ticket["workspace_id"] == other["default_workspace_id"]
 
 
 @pytest.mark.asyncio

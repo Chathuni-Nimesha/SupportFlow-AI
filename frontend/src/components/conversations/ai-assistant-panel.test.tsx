@@ -62,6 +62,9 @@ describe("AiAssistantPanel", () => {
     ).toBeInTheDocument()
     expect(screen.getByText("Refund policy")).toBeInTheDocument()
     expect(suggestConversationReply).toHaveBeenCalledWith("conv-1", 5)
+    expect(screen.queryByText("Customer sentiment")).not.toBeInTheDocument()
+    expect(screen.queryByText("Confidence score")).not.toBeInTheDocument()
+    expect(screen.queryByText("Not analyzed yet")).not.toBeInTheDocument()
   })
 
   it("shows an error when suggestion generation fails", async () => {

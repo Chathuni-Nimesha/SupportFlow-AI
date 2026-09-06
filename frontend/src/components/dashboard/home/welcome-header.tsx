@@ -37,7 +37,7 @@ export function WelcomeHeader() {
           {heading}
         </h1>
         <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
-          Review conversations and knowledge in your workspace.
+          Review conversations, tickets, and knowledge in your workspace.
         </p>
         {currentWorkspace ? (
           <p className="mt-1 text-xs font-medium text-muted-foreground">

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Plus, Users } from "lucide-react"
+import { useSearchParams } from "react-router-dom"
 
 import { CustomerDetailPanel } from "@/components/customers/customer-detail"
 import { CustomerForm } from "@/components/customers/customer-form"
@@ -37,8 +38,30 @@ type PanelMode = "closed" | "create" | "edit" | "view" | "delete"
 
 const CUSTOMERS_QUERY_KEY = ["customers"] as const
 
+function replaceSearchParam(
+  searchParams: URLSearchParams,
+  setSearchParams: ReturnType<typeof useSearchParams>[1],
+  key: string,
+  value: string | null,
+) {
+  const current = searchParams.get(key)
+  if (value) {
+    if (current === value) return
+    const next = new URLSearchParams(searchParams)
+    next.set(key, value)
+    setSearchParams(next, { replace: true })
+    return
+  }
+  if (!searchParams.has(key)) return
+  const next = new URLSearchParams(searchParams)
+  next.delete(key)
+  setSearchParams(next, { replace: true })
+}
+
 export function CustomersBoard() {
   const queryClient = useQueryClient()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const requestedCustomerId = searchParams.get("customer")?.trim() || null
   const [search, setSearch] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
   const [page, setPage] = useState(1)
@@ -68,10 +91,20 @@ export function CustomersBoard() {
     placeholderData: keepPreviousData,
   })
 
+  const suppressCustomerQuery =
+    panelMode === "create" || panelMode === "edit" || panelMode === "delete"
+  const isQueryView = Boolean(requestedCustomerId) && !suppressCustomerQuery
+  const viewCustomerId = isQueryView
+    ? requestedCustomerId
+    : panelMode === "view"
+      ? activeCustomer?.id ?? null
+      : null
+
   const detailQuery = useQuery({
-    queryKey: [...CUSTOMERS_QUERY_KEY, "detail", activeCustomer?.id],
-    queryFn: () => getCustomer(activeCustomer!.id),
-    enabled: panelMode === "view" && Boolean(activeCustomer?.id),
+    queryKey: [...CUSTOMERS_QUERY_KEY, "detail", viewCustomerId],
+    queryFn: () => getCustomer(viewCustomerId!),
+    enabled: Boolean(viewCustomerId),
+    retry: false,
   })
 
   const customers = listQuery.data?.items ?? []
@@ -84,6 +117,7 @@ export function CustomersBoard() {
     setActiveCustomer(null)
     setFormError(null)
     setFormValues(emptyCustomerFormValues())
+    replaceSearchParam(searchParams, setSearchParams, "customer", null)
   }
 
   const createMutation = useMutation({
@@ -128,14 +162,15 @@ export function CustomersBoard() {
 
   const isSaving = createMutation.isPending || updateMutation.isPending
   const deletingId = deleteMutation.isPending ? activeCustomer?.id ?? null : null
-  const panelOpen = panelMode !== "closed"
+  const panelOpen = panelMode !== "closed" || isQueryView
 
   const panelTitle = useMemo(() => {
     if (panelMode === "create") return "New customer"
     if (panelMode === "edit") return "Edit customer"
     if (panelMode === "delete") return "Delete customer"
+    if (isQueryView && detailQuery.isError) return "Customer not found"
     return "Customer details"
-  }, [panelMode])
+  }, [detailQuery.isError, isQueryView, panelMode])
 
   const closePanel = () => {
     if (isSaving || deleteMutation.isPending) return
@@ -143,6 +178,7 @@ export function CustomersBoard() {
   }
 
   const openCreate = () => {
+    replaceSearchParam(searchParams, setSearchParams, "customer", null)
     setActiveCustomer(null)
     setFormValues(emptyCustomerFormValues())
     setFormError(null)
@@ -153,6 +189,7 @@ export function CustomersBoard() {
     setActiveCustomer(customer)
     setFormError(null)
     setPanelMode("view")
+    replaceSearchParam(searchParams, setSearchParams, "customer", customer.id)
   }
 
   const openEdit = (customer: Customer) => {
@@ -295,18 +332,19 @@ export function CustomersBoard() {
             />
           ) : null}
 
-          {panelMode === "view" && activeCustomer ? (
-            detailQuery.isLoading ? (
+          {panelMode === "view" || isQueryView ? (
+            detailQuery.isLoading || (!detailQuery.data && !detailQuery.isError) ? (
               <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
                 Loading customer…
               </div>
             ) : detailQuery.isError ? (
               <div className="space-y-3 px-4 py-6">
-                <p className="text-sm text-rose-700 dark:text-rose-300">
-                  {getApiErrorMessage(
-                    detailQuery.error,
-                    "Unable to load customer details.",
-                  )}
+                <p className="text-sm font-semibold text-foreground">
+                  Customer not found
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  This customer is not in your workspace, or it no longer
+                  exists.
                 </p>
                 <Button
                   type="button"
@@ -334,7 +372,10 @@ export function CustomersBoard() {
                   <span className="font-semibold">
                     {customerDisplayName(activeCustomer)}
                   </span>
-                  ? This cannot be undone. Related conversations are not deleted.
+                  ? This cannot be undone. Conversations stay in the workspace
+                  and keep their name and email, but the customer link is
+                  removed. Customers with tickets cannot be deleted until those
+                  tickets are reassigned or removed.
                 </p>
                 {formError ? (
                   <p className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">

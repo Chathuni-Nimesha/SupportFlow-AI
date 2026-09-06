@@ -439,7 +439,7 @@ async def test_legacy_tickets_without_customer_or_conversation_remain_readable(
 
 
 @pytest.mark.asyncio
-async def test_customer_delete_does_not_cascade_tickets(
+async def test_customer_delete_is_blocked_when_tickets_exist(
     client: AsyncClient,
     auth_headers: dict[str, str],
 ) -> None:
@@ -449,14 +449,19 @@ async def test_customer_delete_does_not_cascade_tickets(
         f"/api/v1/customers/{customer['id']}",
         headers=auth_headers,
     )
-    assert deleted.status_code == 204
+    assert deleted.status_code == 409
+    assert "tickets" in deleted.json()["detail"].lower()
     detail = await client.get(
         f"/api/v1/tickets/{created['id']}",
         headers=auth_headers,
     )
     assert detail.status_code == 200
     assert detail.json()["customer_id"] == customer["id"]
-    assert detail.json()["customer"] is None
+    still_customer = await client.get(
+        f"/api/v1/customers/{customer['id']}",
+        headers=auth_headers,
+    )
+    assert still_customer.status_code == 200
 
 
 @pytest.mark.asyncio

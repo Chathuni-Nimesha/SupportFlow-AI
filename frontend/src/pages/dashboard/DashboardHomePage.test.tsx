@@ -35,7 +35,7 @@ vi.mock("@/services/tickets", () => ({
 }))
 
 describe("DashboardHomePage", () => {
-  it("renders the dashboard and unavailable panels", async () => {
+  it("renders a live dashboard without placeholder metric panels", async () => {
     vi.mocked(fetchCurrentUser).mockResolvedValue(sampleUser)
     vi.mocked(listConversations).mockResolvedValue(asPage([]))
     vi.mocked(listTickets).mockResolvedValue(asPage([]))
@@ -44,21 +44,15 @@ describe("DashboardHomePage", () => {
 
     expect(await screen.findByText("Welcome back")).toBeInTheDocument()
     expect(screen.getByText("Total Conversations")).toBeInTheDocument()
-    expect(screen.getAllByText("Not available").length).toBeGreaterThan(0)
+    expect(screen.getByText("Open Tickets")).toBeInTheDocument()
     expect(await screen.findByText("No tickets yet")).toBeInTheDocument()
     expect(
       screen.getByText("Create a ticket to see recent issues here."),
     ).toBeInTheDocument()
-    expect(
-      screen.getByText(
-        "AI performance trends are not available yet. No resolution-rate backend exists.",
-      ),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByText(
-        "Activity tracking is not available yet. No activity API exists.",
-      ),
-    ).toBeInTheDocument()
+    expect(screen.queryByText("Not available")).not.toBeInTheDocument()
+    expect(screen.queryByText("AI Performance Overview")).not.toBeInTheDocument()
+    expect(screen.queryByText("AI Summary")).not.toBeInTheDocument()
+    expect(screen.queryByText("Activity Timeline")).not.toBeInTheDocument()
     expect(screen.queryByText("VIP customer")).not.toBeInTheDocument()
   })
 

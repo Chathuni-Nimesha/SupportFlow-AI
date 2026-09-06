@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Plus, Ticket as TicketIcon } from "lucide-react"
+import { useSearchParams } from "react-router-dom"
 
 import { TicketDetailPanel } from "@/components/tickets/ticket-detail"
 import { TicketForm } from "@/components/tickets/ticket-form"
@@ -66,8 +67,30 @@ function assignableMembers(
 const selectClassName =
   "h-11 w-full rounded-2xl border border-border/80 bg-background px-3 text-sm shadow-soft focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
 
+function replaceSearchParam(
+  searchParams: URLSearchParams,
+  setSearchParams: ReturnType<typeof useSearchParams>[1],
+  key: string,
+  value: string | null,
+) {
+  const current = searchParams.get(key)
+  if (value) {
+    if (current === value) return
+    const next = new URLSearchParams(searchParams)
+    next.set(key, value)
+    setSearchParams(next, { replace: true })
+    return
+  }
+  if (!searchParams.has(key)) return
+  const next = new URLSearchParams(searchParams)
+  next.delete(key)
+  setSearchParams(next, { replace: true })
+}
+
 export function TicketsBoard() {
   const queryClient = useQueryClient()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const requestedTicketId = searchParams.get("ticket")?.trim() || null
 
   const [search, setSearch] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState("")
@@ -130,10 +153,20 @@ export function TicketsBoard() {
     queryFn: () => listTeamMembers({ page: 1, pageSize: PICKER_PAGE_SIZE }),
   })
 
+  const suppressTicketQuery =
+    panelMode === "create" || panelMode === "edit" || panelMode === "delete"
+  const isQueryView = Boolean(requestedTicketId) && !suppressTicketQuery
+  const viewTicketId = isQueryView
+    ? requestedTicketId
+    : panelMode === "view"
+      ? activeTicket?.id ?? null
+      : null
+
   const detailQuery = useQuery({
-    queryKey: [...TICKETS_QUERY_KEY, "detail", activeTicket?.id],
-    queryFn: () => getTicket(activeTicket!.id),
-    enabled: panelMode === "view" && Boolean(activeTicket?.id),
+    queryKey: [...TICKETS_QUERY_KEY, "detail", viewTicketId],
+    queryFn: () => getTicket(viewTicketId!),
+    enabled: Boolean(viewTicketId),
+    retry: false,
   })
 
   const tickets = listQuery.data?.items ?? []
@@ -152,6 +185,7 @@ export function TicketsBoard() {
     setActiveTicket(null)
     setFormError(null)
     setFormValues(emptyTicketFormValues())
+    replaceSearchParam(searchParams, setSearchParams, "ticket", null)
   }
 
   const createMutation = useMutation({
@@ -196,20 +230,21 @@ export function TicketsBoard() {
 
   const isSaving = createMutation.isPending || updateMutation.isPending
   const deletingId = deleteMutation.isPending ? activeTicket?.id ?? null : null
-  const panelOpen = panelMode !== "closed"
+  const panelOpen = panelMode !== "closed" || isQueryView
 
   useEffect(() => {
-    if (panelMode === "view" && detailQuery.data) {
+    if ((panelMode === "view" || isQueryView) && detailQuery.data) {
       setActiveTicket(detailQuery.data)
     }
-  }, [detailQuery.data, panelMode])
+  }, [detailQuery.data, isQueryView, panelMode])
 
   const panelTitle = useMemo(() => {
     if (panelMode === "create") return "New ticket"
     if (panelMode === "edit") return "Edit ticket"
     if (panelMode === "delete") return "Delete ticket"
+    if (isQueryView && detailQuery.isError) return "Ticket not found"
     return "Ticket details"
-  }, [panelMode])
+  }, [detailQuery.isError, isQueryView, panelMode])
 
   const closePanel = () => {
     if (isSaving || deleteMutation.isPending) return
@@ -217,6 +252,7 @@ export function TicketsBoard() {
   }
 
   const openCreate = () => {
+    replaceSearchParam(searchParams, setSearchParams, "ticket", null)
     setActiveTicket(null)
     setFormValues(emptyTicketFormValues())
     setFormError(null)
@@ -227,6 +263,7 @@ export function TicketsBoard() {
     setActiveTicket(ticket)
     setFormError(null)
     setPanelMode("view")
+    replaceSearchParam(searchParams, setSearchParams, "ticket", ticket.id)
   }
 
   const openEdit = (ticket: Ticket) => {
@@ -463,14 +500,18 @@ export function TicketsBoard() {
             />
           ) : null}
 
-          {panelMode === "view" && activeTicket ? (
-            detailQuery.isError && !activeTicket.customer ? (
+          {panelMode === "view" || isQueryView ? (
+            detailQuery.isLoading || (!detailQuery.data && !detailQuery.isError) ? (
+              <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+                Loading ticket…
+              </div>
+            ) : detailQuery.isError ? (
               <div className="space-y-3 px-4 py-6">
-                <p className="text-sm text-rose-700 dark:text-rose-300">
-                  {getApiErrorMessage(
-                    detailQuery.error,
-                    "Unable to load ticket details.",
-                  )}
+                <p className="text-sm font-semibold text-foreground">
+                  Ticket not found
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  This ticket is not in your workspace, or it no longer exists.
                 </p>
                 <Button
                   type="button"
@@ -481,31 +522,31 @@ export function TicketsBoard() {
                   Close
                 </Button>
               </div>
-            ) : (
+            ) : detailQuery.data ? (
               <TicketDetailPanel
-                ticket={activeTicket}
-                onEdit={() => openEdit(activeTicket)}
+                ticket={detailQuery.data}
+                onEdit={() => openEdit(detailQuery.data)}
                 onClose={closePanel}
                 members={assignableMembers(
                   teamMembers,
-                  activeTicket.assignee_id,
+                  detailQuery.data.assignee_id,
                 )}
                 membersLoading={teamQuery.isLoading}
                 isSaving={updateMutation.isPending}
                 error={formError}
                 onStatusChange={(status) =>
-                  handleQuickUpdate(activeTicket.id, { status })
+                  handleQuickUpdate(detailQuery.data.id, { status })
                 }
                 onPriorityChange={(priority) =>
-                  handleQuickUpdate(activeTicket.id, { priority })
+                  handleQuickUpdate(detailQuery.data.id, { priority })
                 }
                 onAssigneeChange={(assigneeId) =>
-                  handleQuickUpdate(activeTicket.id, {
+                  handleQuickUpdate(detailQuery.data.id, {
                     assignee_id: assigneeId,
                   })
                 }
               />
-            )
+            ) : null
           ) : null}
 
           {panelMode === "delete" && activeTicket ? (

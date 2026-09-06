@@ -1,9 +1,4 @@
-import {
-  BarChart3,
-  MessageSquare,
-  Sparkles,
-  Ticket,
-} from "lucide-react"
+import { MessageSquare, Ticket } from "lucide-react"
 
 import { KpiCard } from "@/components/dashboard/home/kpi-card"
 import type { KpiMetric } from "@/data/dashboard-home"
@@ -11,8 +6,6 @@ import type { KpiMetric } from "@/data/dashboard-home"
 const icons = {
   conversations: MessageSquare,
   tickets: Ticket,
-  "ai-rate": Sparkles,
-  csat: BarChart3,
 } as const
 
 type KpiCardsProps = {
@@ -69,26 +62,10 @@ export function KpiCards({
           ? "Loading from your workspace"
           : "OPEN tickets in your workspace",
     },
-    {
-      id: "ai-rate",
-      label: "AI Resolution Rate",
-      value: "Not available",
-      change: "—",
-      trend: "neutral",
-      helper: "No resolution-rate metric yet",
-    },
-    {
-      id: "csat",
-      label: "CSAT",
-      value: "Not available",
-      change: "—",
-      trend: "neutral",
-      helper: "No CSAT backend yet",
-    },
   ]
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid gap-4 sm:grid-cols-2">
       {metrics.map((metric, index) => (
         <KpiCard
           key={metric.id}

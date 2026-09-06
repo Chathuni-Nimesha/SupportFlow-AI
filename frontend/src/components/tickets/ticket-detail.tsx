@@ -220,7 +220,11 @@ export function TicketDetailPanel({
 
           {ticket.customer ? (
             <Button variant="outline" className="rounded-2xl" asChild>
-              <Link to="/dashboard/customers">View customer</Link>
+              <Link
+                to={`/dashboard/customers?customer=${encodeURIComponent(ticket.customer_id)}`}
+              >
+                View customer
+              </Link>
             </Button>
           ) : null}
         </div>

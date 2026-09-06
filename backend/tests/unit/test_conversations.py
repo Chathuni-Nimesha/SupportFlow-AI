@@ -397,6 +397,111 @@ async def test_update_conversation_assigns_and_unassigns_member(
 
 
 @pytest.mark.asyncio
+async def test_update_conversation_reassigns_member(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+) -> None:
+    first = await _create_member(client, auth_headers)
+    second = await _create_member(
+        client,
+        auth_headers,
+        email="jordan@acme.example",
+        first_name="Jordan",
+        last_name="Lee",
+    )
+    created = await client.post(
+        "/api/v1/conversations",
+        headers=auth_headers,
+        json={**SAMPLE_CONVERSATION, "assigned_agent_id": first["id"]},
+    )
+    conversation_id = created.json()["id"]
+    assert created.json()["status"] == "Open"
+
+    reassigned = await client.patch(
+        f"/api/v1/conversations/{conversation_id}",
+        headers=auth_headers,
+        json={"assigned_agent_id": second["id"]},
+    )
+    assert reassigned.status_code == 200
+    assert reassigned.json()["assigned_agent_id"] == second["id"]
+    assert reassigned.json()["status"] == "Open"
+
+
+@pytest.mark.asyncio
+async def test_update_conversation_rejects_foreign_assignee(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+    sample_register_payload: dict,
+) -> None:
+    created = await client.post(
+        "/api/v1/conversations",
+        headers=auth_headers,
+        json=SAMPLE_CONVERSATION,
+    )
+    conversation_id = created.json()["id"]
+    other_headers = await _other_owner_headers(
+        client,
+        sample_register_payload,
+        email="other-conv-patch-assign@acme.example",
+    )
+    foreign = await _create_member(
+        client,
+        other_headers,
+        email="foreign-patch-agent@acme.example",
+    )
+
+    response = await client.patch(
+        f"/api/v1/conversations/{conversation_id}",
+        headers=auth_headers,
+        json={"assigned_agent_id": foreign["id"]},
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Team member not found."
+
+    stored = await client.get(
+        f"/api/v1/conversations/{conversation_id}",
+        headers=auth_headers,
+    )
+    assert stored.status_code == 200
+    assert stored.json()["assigned_agent_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_update_conversation_rejects_inactive_assignee(
+    client: AsyncClient,
+    auth_headers: dict[str, str],
+) -> None:
+    member = await _create_member(client, auth_headers)
+    disabled = await client.patch(
+        f"/api/v1/team/{member['id']}",
+        headers=auth_headers,
+        json={"status": "DISABLED"},
+    )
+    assert disabled.status_code == 200
+
+    created = await client.post(
+        "/api/v1/conversations",
+        headers=auth_headers,
+        json=SAMPLE_CONVERSATION,
+    )
+    conversation_id = created.json()["id"]
+
+    response = await client.patch(
+        f"/api/v1/conversations/{conversation_id}",
+        headers=auth_headers,
+        json={"assigned_agent_id": member["id"]},
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Assignee is not an active team member."
+
+    stored = await client.get(
+        f"/api/v1/conversations/{conversation_id}",
+        headers=auth_headers,
+    )
+    assert stored.json()["assigned_agent_id"] is None
+
+
+@pytest.mark.asyncio
 async def test_create_conversation_stamps_workspace_and_owner(
     client: AsyncClient,
     auth_headers: dict[str, str],

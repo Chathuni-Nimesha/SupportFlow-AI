@@ -12,6 +12,7 @@ import {
   updateKnowledgeDocument,
 } from "@/services/knowledge"
 import { makeAgentUser, makeKnowledgeDocument,
+  sampleUser,
   asPage,
 } from "@/test/fixtures"
 import { deferred, renderWithProviders } from "@/test/test-utils"
@@ -48,6 +49,8 @@ function ingestResponse(
 
 describe("KnowledgeBaseBoard", () => {
   beforeEach(() => {
+    localStorage.setItem("access_token", "test-token")
+    vi.mocked(fetchCurrentUser).mockResolvedValue(sampleUser)
     vi.mocked(listKnowledgeDocuments).mockReset()
     vi.mocked(getKnowledgeDocument).mockReset()
     vi.mocked(createKnowledgeDocument).mockReset()

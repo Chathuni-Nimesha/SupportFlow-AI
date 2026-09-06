@@ -35,6 +35,15 @@ customer. `PATCH { "conversation_id": null }` still unlinks the conversation.
 
 ## Deletion
 
-- Customer delete remains non-cascading. Tickets keep `customer_id`; the
-  nested customer summary may be `null`.
+Customer delete does **not** cascade to tickets or conversations.
+
+- If any ticket in the **current workspace** still references the
+  customer, deletion is rejected with **409**. Tickets keep requiring
+  `customer_id`; the API does not null it or invent a replacement
+  customer.
+- If no workspace tickets are linked, the customer is deleted and
+  workspace-scoped conversations are **unlinked** (`customer_id`
+  unset). `customer_name` and `customer_email` snapshots stay.
+- Foreign-workspace tickets and conversations are never counted or
+  rewritten.
 - There is no conversation delete API. Tickets are not cascade-deleted.

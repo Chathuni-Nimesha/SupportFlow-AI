@@ -30,7 +30,7 @@ export function currentWorkspaceRole(
 
 export function canManageWorkspace(user: AuthUser | null | undefined): boolean {
   const role = currentWorkspaceRole(user)
-  if (role == null) return true
+  if (role == null) return false
   return MANAGER_ROLES.has(role)
 }
 

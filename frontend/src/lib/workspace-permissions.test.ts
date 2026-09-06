@@ -68,9 +68,9 @@ describe("workspace permissions", () => {
     expect(canManageKnowledge(agent)).toBe(false)
   })
 
-  it("keeps management controls when role is unknown", () => {
-    expect(canManageTeam(null)).toBe(true)
-    expect(canManageKnowledge(undefined)).toBe(true)
-    expect(canManageWorkspace(makeAuthUser({ workspaces: [] }))).toBe(true)
+  it("denies management controls when role is missing or unknown", () => {
+    expect(canManageTeam(null)).toBe(false)
+    expect(canManageKnowledge(undefined)).toBe(false)
+    expect(canManageWorkspace(makeAuthUser({ workspaces: [] }))).toBe(false)
   })
 })

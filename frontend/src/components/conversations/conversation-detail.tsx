@@ -1,3 +1,4 @@
+import { useMemo } from "react"
 import { ArrowLeft, Loader2 } from "lucide-react"
 import { Link } from "react-router-dom"
 
@@ -8,12 +9,14 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { teamMemberDisplayName } from "@/lib/team-mappers"
 import {
   TICKET_PRIORITY_LABELS,
   TICKET_STATUS_LABELS,
   conversationHasOpenTickets,
   conversationTicketsAllResolved,
 } from "@/lib/ticket-mappers"
+import type { TeamMember } from "@/types/team"
 import type { Ticket } from "@/types/tickets"
 import { cn } from "@/lib/utils"
 
@@ -30,12 +33,16 @@ type ConversationDetailProps = {
   onDraftChange: (value: string) => void
   onSend: (value: string) => Promise<void>
   onStatusChange?: (status: ConversationStatus) => Promise<void> | void
+  onAssigneeChange?: (assignedAgentId: string | null) => Promise<void> | void
   onBack?: () => void
   isMessagesLoading?: boolean
   messagesError?: string | null
   sendError?: string | null
   isSending?: boolean
   isUpdatingStatus?: boolean
+  isUpdatingAssignee?: boolean
+  members?: TeamMember[]
+  membersLoading?: boolean
   linkedTickets?: Ticket[]
   linkedTicketsLoading?: boolean
   linkedTicketsError?: string | null
@@ -44,18 +51,37 @@ type ConversationDetailProps = {
   className?: string
 }
 
+function assignableConversationMembers(
+  members: TeamMember[],
+  currentAssignedId?: string | null,
+): TeamMember[] {
+  const active = members.filter((member) => member.status === "ACTIVE")
+  if (
+    currentAssignedId &&
+    !active.some((member) => member.id === currentAssignedId)
+  ) {
+    const current = members.find((member) => member.id === currentAssignedId)
+    if (current) return [...active, current]
+  }
+  return active
+}
+
 export function ConversationDetail({
   conversation,
   draft,
   onDraftChange,
   onSend,
   onStatusChange,
+  onAssigneeChange,
   onBack,
   isMessagesLoading = false,
   messagesError = null,
   sendError = null,
   isSending = false,
   isUpdatingStatus = false,
+  isUpdatingAssignee = false,
+  members = [],
+  membersLoading = false,
   linkedTickets = [],
   linkedTicketsLoading = false,
   linkedTicketsError = null,
@@ -63,6 +89,15 @@ export function ConversationDetail({
   assignedAgentLabel,
   className,
 }: ConversationDetailProps) {
+  const assignOptions = useMemo(
+    () =>
+      assignableConversationMembers(
+        members,
+        conversation?.assignedAgentId,
+      ),
+    [members, conversation?.assignedAgentId],
+  )
+
   if (!conversation) {
     return (
       <section
@@ -119,26 +154,52 @@ export function ConversationDetail({
               : " · Agent: Unassigned"}
           </p>
         </div>
-        {onStatusChange ? (
-          <label className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
-            <span className="sr-only">Status</span>
-            <select
-              aria-label="Conversation status"
-              value={conversation.status}
-              disabled={isUpdatingStatus}
-              onChange={(event) => {
-                void onStatusChange(event.target.value as ConversationStatus)
-              }}
-              className="h-9 max-w-[8.5rem] rounded-xl border border-border/80 bg-card px-2 text-xs font-medium text-foreground shadow-soft focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-60"
-            >
-              {STATUS_OPTIONS.map((status) => (
-                <option key={status} value={status}>
-                  {status}
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          {onAssigneeChange ? (
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="sr-only">Assigned agent</span>
+              <select
+                aria-label="Assigned agent"
+                value={conversation.assignedAgentId ?? ""}
+                disabled={isUpdatingAssignee || membersLoading}
+                onChange={(event) => {
+                  void onAssigneeChange(event.target.value || null)
+                }}
+                className="h-9 max-w-[10.5rem] rounded-xl border border-border/80 bg-card px-2 text-xs font-medium text-foreground shadow-soft focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-60"
+              >
+                <option value="">
+                  {membersLoading ? "Loading team…" : "Unassigned"}
                 </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
+                {assignOptions.map((member) => (
+                  <option key={member.id} value={member.id}>
+                    {teamMemberDisplayName(member)}
+                    {member.role === "OWNER" ? " (Owner)" : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          {onStatusChange ? (
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="sr-only">Status</span>
+              <select
+                aria-label="Conversation status"
+                value={conversation.status}
+                disabled={isUpdatingStatus}
+                onChange={(event) => {
+                  void onStatusChange(event.target.value as ConversationStatus)
+                }}
+                className="h-9 max-w-[8.5rem] rounded-xl border border-border/80 bg-card px-2 text-xs font-medium text-foreground shadow-soft focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-60"
+              >
+                {STATUS_OPTIONS.map((status) => (
+                  <option key={status} value={status}>
+                    {status}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+        </div>
       </header>
 
       <ScrollArea className="flex-1">
@@ -183,7 +244,7 @@ export function ConversationDetail({
                   {linkedTickets.map((ticket) => (
                     <li key={ticket.id}>
                       <Link
-                        to={`/dashboard/tickets`}
+                        to={`/dashboard/tickets?ticket=${encodeURIComponent(ticket.id)}`}
                         className="block rounded-xl border border-border/70 bg-background px-3 py-2 hover:bg-muted/40"
                       >
                         <p className="text-sm font-medium text-foreground">
@@ -242,7 +303,10 @@ export function ConversationDetail({
                 No messages yet
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
-                Send a reply to start this thread.
+                {conversation.status === "Closed" ||
+                conversation.status === "AI Resolved"
+                  ? "This thread has no messages."
+                  : "Send a reply to start this thread."}
               </p>
             </div>
           ) : (
@@ -253,14 +317,42 @@ export function ConversationDetail({
         </div>
       </ScrollArea>
 
-      <ReplyComposer
-        draft={draft}
-        onDraftChange={onDraftChange}
-        onSend={onSend}
-        sending={isSending}
-        error={sendError}
-        disabled={isMessagesLoading || Boolean(messagesError)}
-      />
+      {conversation.status === "Closed" ||
+      conversation.status === "AI Resolved" ? (
+        <div
+          className="border-t border-border/70 bg-card px-4 py-4"
+          role="status"
+        >
+          <p className="text-sm font-medium text-foreground">
+            This conversation is{" "}
+            {conversation.status === "AI Resolved"
+              ? "marked AI Resolved"
+              : "closed"}
+            .
+          </p>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            Replies are disabled. Change the status to Open or Waiting if the
+            thread needs more follow-up.
+          </p>
+          {sendError ? (
+            <p
+              className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200"
+              role="alert"
+            >
+              {sendError}
+            </p>
+          ) : null}
+        </div>
+      ) : (
+        <ReplyComposer
+          draft={draft}
+          onDraftChange={onDraftChange}
+          onSend={onSend}
+          sending={isSending}
+          error={sendError}
+          disabled={isMessagesLoading || Boolean(messagesError)}
+        />
+      )}
     </section>
   )
 }
