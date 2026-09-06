@@ -1,11 +1,17 @@
 # Phase 1B — Personal workspace backfill
 
-Additive MongoDB migration. It prepares existing `owner_id`-scoped data for
-workspaces. It does **not** change application runtime.
+Additive MongoDB migration for databases that still have resources without
+`workspace_id`. It does **not** change application code, JWT structure, or
+startup behavior.
 
-**Status after Phase 1D–1I:** live queries use `workspace_id` from
-`get_current_workspace`. This script still *finds* unstamped documents by
-`owner_id`. That is a migration lookup, not the runtime tenant boundary.
+**Runtime tenant boundary:** live queries use `workspace_id` from
+`get_current_workspace()`. `owner_id` is compatibility and attribution
+metadata only. This script is **not** the tenant boundary: it *finds*
+unstamped documents by `owner_id` so it can stamp the missing
+`workspace_id`. That lookup is migration-only.
+
+A **new empty database** does not need this script. Registering a user
+creates a personal workspace and stamps `workspace_id` on new resources.
 
 ## Purpose
 
@@ -13,13 +19,20 @@ For every existing user, ensure exactly one personal workspace
 (`owner_user_id = user._id`) and set `workspace_id` on that user's resources
 when the field is missing.
 
-Runtime isolation remains:
+Runtime isolation is:
 
 ```text
-JWT user.id → owner_id → resources
+JWT {sub, exp, type}
+  → authenticated user
+  → get_current_workspace()
+  → workspace_id
+  → resources
 ```
 
-`workspace_id` is stored for the later cutover. Queries still use `owner_id`.
+This migration does **not** establish `owner_id` as the runtime tenant
+boundary. After resources are stamped, APIs continue to scope data by
+`workspace_id` from `get_current_workspace()`. `owner_id` remains on
+documents as compatibility/attribution metadata and is not removed.
 
 ## Dry-run command (zero writes)
 
@@ -121,11 +134,16 @@ This migration only **adds** data:
 
 ## Warnings
 
-**Chroma is NOT migrated yet.** Knowledge embeddings still filter on
-`owner_id`. Do not change RAG retrieval as part of this backfill.
+**This script does not migrate Chroma.** It only stamps MongoDB
+`workspace_id`. After a backfill on an existing knowledge base, run the
+separate Chroma reindex (`python -m scripts.reindex_knowledge_chroma` from
+`backend/`) so chunk metadata includes `workspace_id`. Runtime RAG
+retrieval already filters on `workspace_id` and `status=Published`; it does
+not use `owner_id` as the tenant boundary.
 
-**Runtime still uses `owner_id`.** Setting `workspace_id` does not switch
-API queries, JWT claims, auth, or the frontend. Application behavior after
-this script must match pre-1B behavior.
+**This migration does not switch tenancy to `owner_id`.** Stamping
+`workspace_id` does not change JWT claims (`sub`, `exp`, `type` only), auth,
+or the frontend. The active workspace remains `get_current_workspace()`.
+`owner_id` stays as compatibility/attribution metadata.
 
 **Do not run this from the FastAPI lifespan.** It is a manual CLI only.
