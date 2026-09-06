@@ -2,9 +2,23 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.schemas.workspace import WorkspaceSummaryResponse
+
+# bcrypt silently truncates or errors after 72 bytes. Reject longer values.
+BCRYPT_PASSWORD_MAX_BYTES = 72
+PASSWORD_TOO_LONG_FOR_BCRYPT = (
+    "Password is too long. Use at most 72 bytes "
+    "(bcrypt cannot hash longer values safely)."
+)
+
+
+def validate_password_for_bcrypt(password: str) -> str:
+    """Reject passwords bcrypt cannot hash without truncation."""
+    if len(password.encode("utf-8")) > BCRYPT_PASSWORD_MAX_BYTES:
+        raise ValueError(PASSWORD_TOO_LONG_FOR_BCRYPT)
+    return password
 
 
 class UserRegisterRequest(BaseModel):
@@ -12,12 +26,22 @@ class UserRegisterRequest(BaseModel):
     last_name: str = Field(min_length=1, max_length=100)
     company_name: str = Field(min_length=1, max_length=200)
     email: EmailStr
-    password: str = Field(min_length=8, max_length=128)
+    password: str = Field(min_length=8, max_length=BCRYPT_PASSWORD_MAX_BYTES)
+
+    @field_validator("password")
+    @classmethod
+    def password_fits_bcrypt(cls, value: str) -> str:
+        return validate_password_for_bcrypt(value)
 
 
 class UserLoginRequest(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=1, max_length=128)
+    password: str = Field(min_length=1, max_length=BCRYPT_PASSWORD_MAX_BYTES)
+
+    @field_validator("password")
+    @classmethod
+    def password_fits_bcrypt(cls, value: str) -> str:
+        return validate_password_for_bcrypt(value)
 
 
 class UserResponse(BaseModel):

@@ -17,6 +17,9 @@ def _isolated_settings(**overrides) -> Settings:
         "jwt_secret": "change-me-to-a-long-random-secret",
         **overrides,
     }
+    env_name = str(values.get("app_env", "development")).lower()
+    if env_name in {"production", "prod"} and "mongodb_uri" not in overrides:
+        values["mongodb_uri"] = "mongodb://mongo.internal:27017"
     return Settings(_env_file=None, **values)
 
 

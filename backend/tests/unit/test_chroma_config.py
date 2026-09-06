@@ -16,6 +16,7 @@ from app.database.chroma import http_chroma_client_kwargs, reset_chroma_client
 
 TEST_PRODUCTION_JWT_SECRET = "test-only-valid-production-jwt-secret-key"
 TEST_CHROMA_TOKEN = "test-only-chroma-token"
+TEST_PRODUCTION_MONGODB_URI = "mongodb://mongo.internal:27017"
 
 
 def _isolated_settings(**overrides) -> Settings:
@@ -30,6 +31,9 @@ def _isolated_settings(**overrides) -> Settings:
         "chroma_auth_token": "",
         **overrides,
     }
+    env_name = str(values.get("app_env", "development")).lower()
+    if env_name in {"production", "prod"} and "mongodb_uri" not in overrides:
+        values["mongodb_uri"] = TEST_PRODUCTION_MONGODB_URI
     return Settings(_env_file=None, **values)
 
 

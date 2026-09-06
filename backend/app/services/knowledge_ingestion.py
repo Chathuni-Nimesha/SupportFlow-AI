@@ -52,10 +52,32 @@ def build_chunk_id(document_id: str, chunk_index: int) -> str:
     return f"{document_id}::chunk::{chunk_index}"
 
 
-def _delete_document_chunks_sync(document_id: str) -> int:
-    """Remove every chunk for a document, including legacy owner-only metadata."""
+def chroma_document_delete_filter(
+    document_id: str,
+    workspace_id: str | None = None,
+) -> dict[str, Any]:
+    """Chroma delete filter. Include workspace_id when known (defense in depth)."""
+    cleaned_document = str(document_id or "").strip()
+    cleaned_workspace = str(workspace_id or "").strip()
+    if cleaned_workspace:
+        return {
+            "$and": [
+                {"document_id": cleaned_document},
+                {"workspace_id": cleaned_workspace},
+            ],
+        }
+    return {"document_id": cleaned_document}
+
+
+def _delete_document_chunks_sync(
+    document_id: str,
+    workspace_id: str | None = None,
+) -> int:
+    """Remove chunks for a document. Prefer workspace-scoped deletes."""
     collection = get_knowledge_collection()
-    collection.delete(where={"document_id": document_id})
+    collection.delete(
+        where=chroma_document_delete_filter(document_id, workspace_id),
+    )
     return 0
 
 
@@ -76,8 +98,10 @@ def _upsert_document_chunks_sync(document: dict[str, Any]) -> int:
     chunks = chunk_text(f"{title}\n\n{content}")
     collection = get_knowledge_collection()
 
-    # Replace previous vectors for this document, including pre-tenancy chunks.
-    collection.delete(where={"document_id": document_id})
+    # Replace previous vectors for this document in the current workspace.
+    collection.delete(
+        where=chroma_document_delete_filter(document_id, workspace_id),
+    )
 
     if not chunks:
         return 0
@@ -108,9 +132,16 @@ def _upsert_document_chunks_sync(document: dict[str, Any]) -> int:
     return len(chunks)
 
 
-async def remove_document_embeddings(document_id: str) -> None:
-    """Remove all Chroma chunks for a knowledge document."""
-    await asyncio.to_thread(_delete_document_chunks_sync, document_id)
+async def remove_document_embeddings(
+    document_id: str,
+    workspace_id: str | None = None,
+) -> None:
+    """Remove Chroma chunks for a knowledge document."""
+    await asyncio.to_thread(
+        _delete_document_chunks_sync,
+        document_id,
+        workspace_id,
+    )
 
 
 async def ingest_knowledge_document(document: dict[str, Any]) -> dict[str, Any]:
@@ -119,10 +150,14 @@ async def ingest_knowledge_document(document: dict[str, Any]) -> dict[str, Any]:
 
     Returns ingestion result fields suitable for MongoDB persistence.
     """
+    workspace_id = str(document.get("workspace_id") or "").strip()
     status = document.get("status")
     if status != "Published":
         try:
-            await remove_document_embeddings(str(document["_id"]))
+            await remove_document_embeddings(
+                str(document["_id"]),
+                workspace_id or None,
+            )
         except Exception:
             logger.exception(
                 "Failed to clear embeddings for non-published document %s",
@@ -135,7 +170,6 @@ async def ingest_knowledge_document(document: dict[str, Any]) -> dict[str, Any]:
             "chunk_count": 0,
         }
 
-    workspace_id = str(document.get("workspace_id") or "").strip()
     if not workspace_id:
         return {
             "ingestion_status": "failed",

@@ -8,6 +8,17 @@ from app.database import mongodb as mongodb_module
 
 
 @pytest.mark.asyncio
+async def test_register_rejects_password_over_bcrypt_limit(
+    client: AsyncClient,
+    sample_register_payload: dict,
+) -> None:
+    payload = {**sample_register_payload, "password": "a" * 73}
+    response = await client.post("/api/v1/auth/register", json=payload)
+    assert response.status_code == 422
+    assert "mongodb" not in response.text.lower()
+
+
+@pytest.mark.asyncio
 async def test_successful_registration(
     client: AsyncClient,
     sample_register_payload: dict,

@@ -4,16 +4,19 @@ import pytest
 
 from app.config.settings import (
     PRODUCTION_JWT_SECRET_ERROR,
+    PRODUCTION_MONGODB_URI_ERROR,
     ProductionSettingsError,
     Settings,
     apply_runtime_security_policy,
     get_settings,
+    is_localhost_mongodb_uri,
     is_unsafe_jwt_secret,
 )
 from main import create_app
 
 TEST_PRODUCTION_JWT_SECRET = "test-only-valid-production-jwt-secret-key"
 TEST_PLACEHOLDER_JWT_SECRET = "change-me-to-a-long-random-secret"
+TEST_PRODUCTION_MONGODB_URI = "mongodb://mongo.internal:27017"
 
 
 def _isolated_settings(**overrides) -> Settings:
@@ -24,6 +27,9 @@ def _isolated_settings(**overrides) -> Settings:
         "jwt_secret": TEST_PLACEHOLDER_JWT_SECRET,
         **overrides,
     }
+    env_name = str(values.get("app_env", "development")).lower()
+    if env_name in {"production", "prod"} and "mongodb_uri" not in overrides:
+        values["mongodb_uri"] = TEST_PRODUCTION_MONGODB_URI
     return Settings(_env_file=None, **values)
 
 
@@ -160,3 +166,56 @@ def test_unsafe_jwt_secret_helper_does_not_require_real_secrets() -> None:
     assert is_unsafe_jwt_secret("") is True
     assert is_unsafe_jwt_secret(TEST_PLACEHOLDER_JWT_SECRET) is True
     assert is_unsafe_jwt_secret(TEST_PRODUCTION_JWT_SECRET) is False
+
+
+def test_development_accepts_localhost_mongodb_uri() -> None:
+    settings = apply_runtime_security_policy(
+        _isolated_settings(app_env="development"),
+    )
+    assert is_localhost_mongodb_uri(settings.mongodb_uri) is True
+
+
+def test_production_rejects_default_localhost_mongodb_uri() -> None:
+    settings = _isolated_settings(
+        app_env="production",
+        jwt_secret=TEST_PRODUCTION_JWT_SECRET,
+        mongodb_uri="mongodb://localhost:27017",
+    )
+    with pytest.raises(ProductionSettingsError) as exc_info:
+        apply_runtime_security_policy(settings)
+    message = str(exc_info.value)
+    assert message == PRODUCTION_MONGODB_URI_ERROR
+    assert "localhost" not in message.lower() or "non-localhost" in message
+    assert "mongodb://" not in message
+
+
+def test_production_rejects_loopback_mongodb_uri() -> None:
+    settings = _isolated_settings(
+        app_env="production",
+        jwt_secret=TEST_PRODUCTION_JWT_SECRET,
+        mongodb_uri="mongodb://127.0.0.1:27017",
+    )
+    with pytest.raises(ProductionSettingsError, match="MONGODB_URI"):
+        apply_runtime_security_policy(settings)
+
+
+def test_production_rejects_blank_mongodb_uri() -> None:
+    settings = _isolated_settings(
+        app_env="production",
+        jwt_secret=TEST_PRODUCTION_JWT_SECRET,
+        mongodb_uri="   ",
+    )
+    with pytest.raises(ProductionSettingsError, match="MONGODB_URI"):
+        apply_runtime_security_policy(settings)
+
+
+def test_production_accepts_non_localhost_mongodb_uri() -> None:
+    settings = apply_runtime_security_policy(
+        _isolated_settings(
+            app_env="production",
+            jwt_secret=TEST_PRODUCTION_JWT_SECRET,
+            mongodb_uri=TEST_PRODUCTION_MONGODB_URI,
+        )
+    )
+    assert settings.mongodb_uri == TEST_PRODUCTION_MONGODB_URI
+    assert is_localhost_mongodb_uri(settings.mongodb_uri) is False

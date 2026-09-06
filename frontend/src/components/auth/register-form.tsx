@@ -2,7 +2,7 @@ import { useId, useState } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { motion } from "framer-motion"
 import { Loader2 } from "lucide-react"
-import { Controller, useForm } from "react-hook-form"
+import { useForm } from "react-hook-form"
 import { Link, Navigate, useNavigate } from "react-router-dom"
 
 import { AuthDivider } from "@/components/auth/auth-divider"
@@ -11,9 +11,7 @@ import { PasswordInput } from "@/components/auth/password-input"
 import { SocialAuthButton } from "@/components/auth/social-auth-button"
 import { fadeUp, staggerContainer } from "@/components/landing/motion"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { useAuth } from "@/context/auth-provider"
 import { registerSchema, type RegisterFormValues } from "@/schemas/auth"
 import { getApiErrorMessage } from "@/utils/api-error"
@@ -32,7 +30,6 @@ export function RegisterForm({ className }: RegisterFormProps) {
   const emailId = useId()
   const passwordId = useId()
   const confirmPasswordId = useId()
-  const termsId = useId()
   const navigate = useNavigate()
   const { register: registerAccount, isAuthenticated, isLoading } = useAuth()
   const [apiError, setApiError] = useState<string | null>(null)
@@ -40,7 +37,6 @@ export function RegisterForm({ className }: RegisterFormProps) {
   const {
     register,
     handleSubmit,
-    control,
     formState: { errors, isSubmitting },
   } = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
@@ -51,7 +47,6 @@ export function RegisterForm({ className }: RegisterFormProps) {
       email: "",
       password: "",
       confirmPassword: "",
-      acceptTerms: false,
     },
   })
 
@@ -205,52 +200,6 @@ export function RegisterForm({ className }: RegisterFormProps) {
             {...register("confirmPassword")}
           />
         </FormField>
-
-        <div className="space-y-2 pt-1">
-          <div className="flex items-start gap-2.5">
-            <Controller
-              name="acceptTerms"
-              control={control}
-              render={({ field }) => (
-                <Checkbox
-                  id={termsId}
-                  checked={field.value}
-                  onCheckedChange={(checked) =>
-                    field.onChange(checked === true)
-                  }
-                  aria-invalid={!!errors.acceptTerms}
-                  className="mt-0.5 rounded-md"
-                />
-              )}
-            />
-            <Label
-              htmlFor={termsId}
-              className="cursor-pointer text-sm font-normal leading-relaxed text-muted-foreground"
-            >
-              I agree to the{" "}
-              <a
-                href="#terms"
-                className="font-medium text-primary hover:text-primary/80"
-                onClick={(event) => event.preventDefault()}
-              >
-                Terms &amp; Conditions
-              </a>{" "}
-              and{" "}
-              <a
-                href="#privacy"
-                className="font-medium text-primary hover:text-primary/80"
-                onClick={(event) => event.preventDefault()}
-              >
-                Privacy Policy
-              </a>
-            </Label>
-          </div>
-          {errors.acceptTerms ? (
-            <p className="text-sm text-destructive" role="alert">
-              {errors.acceptTerms.message}
-            </p>
-          ) : null}
-        </div>
 
         {apiError ? (
           <p

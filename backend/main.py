@@ -22,13 +22,13 @@ settings = get_settings()
 setup_logging(settings.log_level)
 logger = get_logger(__name__)
 
+PRODUCTION_MONGODB_STARTUP_ERROR = (
+    "MongoDB initialization failed. Check MONGODB_URI and network access."
+)
 
-@asynccontextmanager
-async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    """Manage application startup and shutdown resources."""
-    current = get_settings()
-    logger.info("Starting %s (%s)", current.app_name, current.app_env)
 
+async def initialize_mongodb(*, fail_closed: bool) -> None:
+    """Connect and ensure indexes. Production fails closed; development degrades."""
     try:
         await connect_mongodb()
         await ensure_indexes()
@@ -36,8 +36,20 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         logger.warning(
             "MongoDB unavailable (%s). Auth and data features will return "
             "service-unavailable until MongoDB is reachable.",
-            exc,
+            type(exc).__name__,
         )
+        if fail_closed:
+            logger.error("MongoDB initialization failed in production; refusing to start.")
+            raise RuntimeError(PRODUCTION_MONGODB_STARTUP_ERROR) from None
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """Manage application startup and shutdown resources."""
+    current = get_settings()
+    logger.info("Starting %s (%s)", current.app_name, current.app_env)
+
+    await initialize_mongodb(fail_closed=current.is_production)
 
     try:
         yield

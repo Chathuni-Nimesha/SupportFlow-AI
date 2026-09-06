@@ -3,6 +3,7 @@
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated
+from urllib.parse import urlparse
 
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
@@ -25,12 +26,27 @@ _UNSAFE_JWT_SECRETS = frozenset(
         "your_jwt_secret_here",
     }
 )
+_DEFAULT_MONGODB_URI = "mongodb://localhost:27017"
+_LOOPBACK_MONGO_HOSTS = frozenset(
+    {
+        "localhost",
+        "127.0.0.1",
+        "::1",
+        "0:0:0:0:0:0:0:1",
+        "[::1]",
+    }
+)
 _DEVELOPMENT_JWT_PLACEHOLDER = (
     "change-me-in-production-use-a-long-random-secret"
 )
 
 PRODUCTION_JWT_SECRET_ERROR = (
     "JWT_SECRET must be set to a unique non-placeholder value "
+    "when APP_ENV=production."
+)
+
+PRODUCTION_MONGODB_URI_ERROR = (
+    "MONGODB_URI must be set to a non-localhost database "
     "when APP_ENV=production."
 )
 
@@ -95,6 +111,26 @@ def normalize_chroma_auth_header(header: str | None) -> str:
     return "Authorization"
 
 
+def is_localhost_mongodb_uri(uri: str | None) -> bool:
+    """Return True when the URI is missing or points at a loopback host.
+
+    The full URI is never returned or logged. Only the hostname is inspected.
+    """
+    cleaned = (uri or "").strip()
+    if not cleaned:
+        return True
+    normalized = cleaned.rstrip("/")
+    if normalized == _DEFAULT_MONGODB_URI:
+        return True
+    parsed = urlparse(cleaned)
+    host = (parsed.hostname or "").strip().lower().rstrip(".")
+    if not host:
+        return True
+    if host in _LOOPBACK_MONGO_HOSTS:
+        return True
+    return host.startswith("127.")
+
+
 def validate_production_chroma(settings: "Settings") -> None:
     """Reject production HTTP Chroma configs that look publicly unauthenticated."""
     mode = (settings.chroma_mode or "").strip().lower()
@@ -114,10 +150,12 @@ def validate_production_chroma(settings: "Settings") -> None:
 
 
 def apply_runtime_security_policy(settings: "Settings") -> "Settings":
-    """Fail closed in production: require a real JWT secret and disable debug."""
+    """Fail closed in production: require a real JWT secret, real Mongo URI, and disable debug."""
     if settings.is_production:
         if is_unsafe_jwt_secret(settings.jwt_secret):
             raise ProductionSettingsError(PRODUCTION_JWT_SECRET_ERROR)
+        if is_localhost_mongodb_uri(settings.mongodb_uri):
+            raise ProductionSettingsError(PRODUCTION_MONGODB_URI_ERROR)
         settings.app_debug = False
         validate_production_chroma(settings)
     return settings
@@ -160,7 +198,7 @@ class Settings(BaseSettings):
 
     # MongoDB — canonical env var is MONGODB_URI (MONGODB_URL kept as fallback)
     mongodb_uri: str = Field(
-        default="mongodb://localhost:27017",
+        default=_DEFAULT_MONGODB_URI,
         validation_alias=AliasChoices("MONGODB_URI", "MONGODB_URL"),
     )
     mongodb_db_name: str = Field(
