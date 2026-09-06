@@ -39,6 +39,7 @@ describe("ConversationDetail", () => {
     ).toBeInTheDocument()
     expect(screen.getByText("Can I request a refund?")).toBeInTheDocument()
     expect(screen.getByLabelText("Reply message")).toBeInTheDocument()
+    expect(screen.getByText(/Agent: Unassigned/)).toBeInTheDocument()
   })
 
   it("shows linked tickets and a create action", () => {
@@ -63,6 +64,43 @@ describe("ConversationDetail", () => {
     expect(
       screen.getByRole("link", { name: /Refund not received/ }),
     ).toHaveAttribute("href", "/dashboard/tickets")
+    expect(
+      screen.getByText(/Ticket assignees stay independent/),
+    ).toBeInTheDocument()
+  })
+
+  it("warns when a closed conversation still has open tickets", () => {
+    renderWithProviders(
+      <ConversationDetail
+        conversation={makeConversation({ status: "Closed" })}
+        draft=""
+        onDraftChange={vi.fn()}
+        onSend={vi.fn()}
+        linkedTickets={[makeTicket({ status: "OPEN" })]}
+        onCreateTicket={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Linked tickets are still open",
+    )
+  })
+
+  it("warns when linked tickets are resolved but the conversation is still open", () => {
+    renderWithProviders(
+      <ConversationDetail
+        conversation={makeConversation({ status: "Open" })}
+        draft=""
+        onDraftChange={vi.fn()}
+        onSend={vi.fn()}
+        linkedTickets={[makeTicket({ status: "RESOLVED" })]}
+        onCreateTicket={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Close this conversation separately",
+    )
   })
 
   it("does not invent tickets when none are linked", () => {

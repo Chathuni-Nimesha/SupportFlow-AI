@@ -96,6 +96,7 @@ export function mapConversationFromApi(
     updatedAt: conversation.updated_at,
     filterTags: statusToFilterTags(conversation.status),
     messages,
+    assignedAgentId: conversation.assigned_agent_id?.trim() || null,
   }
 }
 

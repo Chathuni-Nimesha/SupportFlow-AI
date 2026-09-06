@@ -151,6 +151,7 @@ export function makeConversation(
     filterTags: ["inbox", "open"],
     messages: [],
     customerId: null,
+    assignedAgentId: null,
     ...overrides,
   }
 }
@@ -207,6 +208,11 @@ export function makeTicket(overrides: Partial<Ticket> = {}): Ticket {
     status: "OPEN",
     priority: "HIGH",
     assignee_id: null,
+    resolved_at: null,
+    resolution_note: null,
+    conversation_status: null,
+    conversation_assigned_agent_id: null,
+    conversation_needs_resolution: null,
     created_at: "2026-08-20T12:00:00.000Z",
     updated_at: "2026-08-20T12:00:00.000Z",
     customer: {

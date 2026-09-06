@@ -15,6 +15,7 @@ import { listCustomers } from "@/services/customers"
 import { createTicket, listTickets } from "@/services/tickets"
 import { listTeamMembers } from "@/services/team"
 import { makeAgentUser, makeConversationApi, makeCustomer, makeMessageApi,
+  makeTeamMember,
   makeTicket,
   asPage,
 } from "@/test/fixtures"
@@ -534,6 +535,33 @@ describe("ConversationsInbox", () => {
       title: "Refund request",
     })
     expect(payload).not.toHaveProperty("workspace_id")
+  }, 10_000)
+
+  it("prefills ticket assignee from the conversation agent", async () => {
+    const user = userEvent.setup()
+    const member = makeTeamMember()
+    const conversation = makeConversationApi({
+      customer_id: "cust-1",
+      assigned_agent_id: member.id,
+    })
+    vi.mocked(listConversations).mockResolvedValue(asPage([conversation]))
+    vi.mocked(getConversation).mockResolvedValue(conversation)
+    vi.mocked(listConversationMessages).mockResolvedValue([makeMessageApi()])
+    vi.mocked(listCustomers).mockResolvedValue(asPage([makeCustomer()]))
+    vi.mocked(listTeamMembers).mockResolvedValue(asPage([member]))
+    vi.mocked(createTicket).mockResolvedValue(
+      makeTicket({
+        conversation_id: conversation.id,
+        assignee_id: member.id,
+      }),
+    )
+
+    renderWithProviders(<ConversationsInbox />)
+    expect(await screen.findByText(/Agent: Sarah Perera/)).toBeInTheDocument()
+    await user.click(await screen.findByRole("button", { name: "Create ticket" }))
+
+    const dialog = await screen.findByRole("dialog")
+    expect(within(dialog).getByLabelText("Assignee")).toHaveValue(member.id)
   }, 10_000)
 
   it("selects a conversation from the workspace-safe query param", async () => {

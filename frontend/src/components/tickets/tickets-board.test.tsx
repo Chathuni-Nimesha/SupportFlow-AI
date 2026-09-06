@@ -460,7 +460,7 @@ describe("TicketsBoard", () => {
     )
 
     const dialog = await screen.findByRole("dialog")
-    expect(within(dialog).getByText("Assigned to")).toBeInTheDocument()
+    expect(within(dialog).getByText("Ticket assignee")).toBeInTheDocument()
     expect(within(dialog).getAllByText("Sarah Perera").length).toBeGreaterThan(0)
   })
 

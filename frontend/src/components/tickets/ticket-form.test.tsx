@@ -43,6 +43,40 @@ describe("TicketForm conversation selector", () => {
     })
   }, 10_000)
 
+  it("prefills assignee from an active conversation agent", async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    const member = makeTeamMember()
+    const conversation = makeConversationApi({
+      id: "conv-4",
+      assigned_agent_id: member.id,
+      subject: "Assigned thread",
+    })
+
+    renderWithProviders(
+      <TicketForm
+        values={emptyTicketFormValues()}
+        onChange={onChange}
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+        submitLabel="Create ticket"
+        customers={[makeCustomer()]}
+        conversations={[conversation]}
+        members={[member]}
+      />,
+    )
+
+    await user.selectOptions(
+      screen.getByLabelText("Conversation (optional)"),
+      conversation.id,
+    )
+    expect(onChange).toHaveBeenCalledWith({
+      ...emptyTicketFormValues(),
+      conversation_id: conversation.id,
+      assignee_id: member.id,
+    })
+  })
+
   it("does not invent a customer when the conversation is unlinked", async () => {
     const user = userEvent.setup()
     const onChange = vi.fn()

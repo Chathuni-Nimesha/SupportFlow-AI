@@ -7,9 +7,11 @@ import {
   TICKET_PRIORITY_LABELS,
   TICKET_STATUS_LABELS,
   assigneeLabel,
+  conversationAssigneeLabel,
   formatTicketDate,
   ticketConversationLabel,
   ticketCustomerName,
+  ticketNeedsConversationResolution,
 } from "@/lib/ticket-mappers"
 import { teamMemberDisplayName } from "@/lib/team-mappers"
 import type { TeamMember } from "@/types/team"
@@ -46,6 +48,8 @@ export function TicketDetailPanel({
 }: TicketDetailPanelProps) {
   const customerName = ticketCustomerName(ticket)
   const conversationLabel = ticketConversationLabel(ticket)
+  const needsConversationResolution =
+    ticketNeedsConversationResolution(ticket)
 
   return (
     <div className="flex h-full flex-col">
@@ -57,6 +61,18 @@ export function TicketDetailPanel({
               role="alert"
             >
               {error}
+            </p>
+          ) : null}
+
+          {needsConversationResolution ? (
+            <p
+              className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100"
+              role="status"
+            >
+              This ticket is {TICKET_STATUS_LABELS[ticket.status].toLowerCase()},
+              but the linked conversation is still{" "}
+              {ticket.conversation_status ?? "open"}. Close the conversation
+              separately if the thread is done.
             </p>
           ) : null}
 
@@ -152,7 +168,7 @@ export function TicketDetailPanel({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="ticket-detail-assignee">Assigned to</Label>
+            <Label htmlFor="ticket-detail-assignee">Ticket assignee</Label>
             <p className="text-sm font-medium text-foreground">
               {assigneeLabel(ticket)}
             </p>
@@ -176,7 +192,31 @@ export function TicketDetailPanel({
                 </option>
               ))}
             </select>
+            {ticket.conversation_id?.trim() ? (
+              <p className="text-xs text-muted-foreground">
+                {conversationAssigneeLabel(ticket)}. Changing the ticket
+                assignee does not change the conversation agent.
+              </p>
+            ) : null}
           </div>
+
+          {ticket.resolved_at || ticket.resolution_note ? (
+            <div className="rounded-2xl border border-border/80 bg-background p-4 shadow-soft">
+              <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                Resolution
+              </p>
+              {ticket.resolved_at ? (
+                <p className="mt-2 text-sm text-foreground">
+                  Recorded {formatTicketDate(ticket.resolved_at)}
+                </p>
+              ) : null}
+              {ticket.resolution_note ? (
+                <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+                  {ticket.resolution_note}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
 
           {ticket.customer ? (
             <Button variant="outline" className="rounded-2xl" asChild>

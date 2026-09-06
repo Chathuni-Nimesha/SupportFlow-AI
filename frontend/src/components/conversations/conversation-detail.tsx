@@ -11,6 +11,8 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   TICKET_PRIORITY_LABELS,
   TICKET_STATUS_LABELS,
+  conversationHasOpenTickets,
+  conversationTicketsAllResolved,
 } from "@/lib/ticket-mappers"
 import type { Ticket } from "@/types/tickets"
 import { cn } from "@/lib/utils"
@@ -38,6 +40,7 @@ type ConversationDetailProps = {
   linkedTicketsLoading?: boolean
   linkedTicketsError?: string | null
   onCreateTicket?: () => void
+  assignedAgentLabel?: string
   className?: string
 }
 
@@ -57,6 +60,7 @@ export function ConversationDetail({
   linkedTicketsLoading = false,
   linkedTicketsError = null,
   onCreateTicket,
+  assignedAgentLabel,
   className,
 }: ConversationDetailProps) {
   if (!conversation) {
@@ -110,6 +114,9 @@ export function ConversationDetail({
           </div>
           <p className="truncate text-xs text-muted-foreground">
             {conversation.customerEmail} · {conversation.channel}
+            {assignedAgentLabel
+              ? ` · Agent: ${assignedAgentLabel}`
+              : " · Agent: Unassigned"}
           </p>
         </div>
         {onStatusChange ? (
@@ -145,7 +152,8 @@ export function ConversationDetail({
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     Tickets in this workspace that already point at this
-                    conversation.
+                    conversation. Ticket assignees stay independent of this
+                    conversation agent.
                   </p>
                 </div>
                 <Button
@@ -190,6 +198,28 @@ export function ConversationDetail({
                   ))}
                 </ul>
               )}
+              {conversationHasOpenTickets(linkedTickets) &&
+              (conversation.status === "Closed" ||
+                conversation.status === "AI Resolved") ? (
+                <p
+                  className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100"
+                  role="status"
+                >
+                  Linked tickets are still open. Closing this conversation does
+                  not change ticket status.
+                </p>
+              ) : null}
+              {conversationTicketsAllResolved(linkedTickets) &&
+              (conversation.status === "Open" ||
+                conversation.status === "Waiting") ? (
+                <p
+                  className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100"
+                  role="status"
+                >
+                  Linked tickets are resolved. Close this conversation
+                  separately if the thread is done.
+                </p>
+              ) : null}
             </div>
           ) : null}
           {isMessagesLoading ? (

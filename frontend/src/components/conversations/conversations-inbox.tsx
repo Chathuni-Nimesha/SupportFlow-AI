@@ -60,6 +60,7 @@ import {
 import { getApiErrorMessage } from "@/utils/api-error"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/context/auth-provider"
+import { teamMemberDisplayName } from "@/lib/team-mappers"
 
 function filterConversations(
   items: Conversation[],
@@ -154,6 +155,13 @@ export function ConversationsInbox() {
     filtered.find((item) => item.id === activeId) ??
     null
 
+  const assignedAgentLabel = useMemo(() => {
+    const assignedId = activeConversation?.assignedAgentId?.trim()
+    if (!assignedId) return "Unassigned"
+    const member = members.find((item) => item.id === assignedId)
+    return member ? teamMemberDisplayName(member) : "Assigned"
+  }, [activeConversation?.assignedAgentId, members])
+
   const loadConversations = useCallback(async () => {
     setListLoading(true)
     setListError(null)
@@ -206,7 +214,7 @@ export function ConversationsInbox() {
   }, [createOpen, ticketCreateOpen, workspaceId])
 
   useEffect(() => {
-    if (!ticketCreateOpen) return
+    if (!activeId && !ticketCreateOpen) return
 
     let cancelled = false
     setMembersLoading(true)
@@ -226,7 +234,7 @@ export function ConversationsInbox() {
     return () => {
       cancelled = true
     }
-  }, [ticketCreateOpen, workspaceId])
+  }, [activeId, ticketCreateOpen, workspaceId])
 
   useEffect(() => {
     if (!activeId) {
@@ -442,7 +450,14 @@ export function ConversationsInbox() {
 
   const openTicketCreate = () => {
     if (!activeConversation) return
-    setTicketValues(ticketFormFromConversation(activeConversation))
+    setTicketValues(
+      ticketFormFromConversation(
+        activeConversation,
+        members.length > 0
+          ? { assignableMemberIds: members.map((member) => member.id) }
+          : undefined,
+      ),
+    )
     setTicketError(null)
     setTicketCreateOpen(true)
   }
@@ -488,7 +503,7 @@ export function ConversationsInbox() {
           subject: activeConversation.subject,
           status: activeConversation.status,
           channel: activeConversation.channel,
-          assigned_agent_id: null,
+          assigned_agent_id: activeConversation.assignedAgentId ?? null,
           unread_count: activeConversation.unread,
           last_message: activeConversation.lastMessage,
           created_at: activeConversation.updatedAt,
@@ -600,6 +615,7 @@ export function ConversationsInbox() {
                 onCreateTicket={
                   activeConversation ? openTicketCreate : undefined
                 }
+                assignedAgentLabel={assignedAgentLabel}
                 className="h-full"
               />
             </motion.div>
