@@ -110,6 +110,7 @@ export type Conversation = {
   updatedAt: string
   filterTags: ConversationFilter[]
   messages: ConversationMessage[]
+  assignedAgentId?: string | null
 }
 
 export type ConversationCreatePayload = {

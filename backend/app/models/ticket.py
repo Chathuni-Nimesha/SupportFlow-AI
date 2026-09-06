@@ -24,6 +24,16 @@ TICKET_PRIORITIES = (
     "URGENT",
 )
 
+TICKET_RESOLVED_STATUSES = (
+    "RESOLVED",
+    "CLOSED",
+)
+
+CONVERSATION_OPEN_STATUSES = (
+    "Open",
+    "Waiting",
+)
+
 
 def utc_now() -> datetime:
     return datetime.now(UTC)
@@ -48,6 +58,42 @@ def apply_optional_conversation_id(
     return document
 
 
+def normalize_optional_resolution_note(resolution_note: str | None) -> str | None:
+    """Return a stripped resolution note, or None when missing or blank."""
+    if resolution_note is None:
+        return None
+    cleaned = str(resolution_note).strip()
+    return cleaned or None
+
+
+def apply_optional_resolution_metadata(
+    document: dict[str, Any],
+    *,
+    resolved_at: datetime | None = None,
+    resolution_note: str | None = None,
+) -> dict[str, Any]:
+    """Attach resolution fields only when they have values. Do not invent history."""
+    if resolved_at is not None:
+        document["resolved_at"] = resolved_at
+    cleaned_note = normalize_optional_resolution_note(resolution_note)
+    if cleaned_note is not None:
+        document["resolution_note"] = cleaned_note
+    return document
+
+
+def conversation_needs_resolution(
+    ticket_status: str,
+    conversation_status: str | None,
+) -> bool | None:
+    """True when a resolved/closed ticket still has an open linked conversation."""
+    if conversation_status is None:
+        return None
+    return (
+        ticket_status in TICKET_RESOLVED_STATUSES
+        and conversation_status in CONVERSATION_OPEN_STATUSES
+    )
+
+
 def build_ticket_document(
     *,
     owner_id: str,
@@ -59,6 +105,8 @@ def build_ticket_document(
     assignee_id: str | None = None,
     workspace_id: str | None = None,
     conversation_id: str | None = None,
+    resolved_at: datetime | None = None,
+    resolution_note: str | None = None,
 ) -> dict[str, Any]:
     """Create a new ticket document ready for insertion."""
     now = utc_now()
@@ -75,7 +123,12 @@ def build_ticket_document(
         "updated_at": now,
     }
     apply_optional_workspace_id(document, workspace_id)
-    return apply_optional_conversation_id(document, conversation_id)
+    apply_optional_conversation_id(document, conversation_id)
+    return apply_optional_resolution_metadata(
+        document,
+        resolved_at=resolved_at,
+        resolution_note=resolution_note,
+    )
 
 
 def serialize_ticket(
@@ -83,8 +136,10 @@ def serialize_ticket(
     *,
     customer: dict[str, Any] | None = None,
     assignee: dict[str, Any] | None = None,
+    conversation: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Map a MongoDB ticket document to a public payload."""
+    conversation_status = conversation.get("status") if conversation else None
     payload = {
         "id": str(document["_id"]),
         "owner_id": document["owner_id"],
@@ -97,6 +152,16 @@ def serialize_ticket(
         "status": document["status"],
         "priority": document["priority"],
         "assignee_id": document.get("assignee_id"),
+        "resolved_at": document.get("resolved_at"),
+        "resolution_note": document.get("resolution_note"),
+        "conversation_status": conversation_status,
+        "conversation_assigned_agent_id": (
+            conversation.get("assigned_agent_id") if conversation else None
+        ),
+        "conversation_needs_resolution": conversation_needs_resolution(
+            document["status"],
+            conversation_status,
+        ),
         "created_at": document["created_at"],
         "updated_at": document["updated_at"],
         "customer": customer,

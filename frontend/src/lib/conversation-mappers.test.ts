@@ -12,4 +12,13 @@ describe("conversation mappers", () => {
       ).customerId,
     ).toBe("cust-1")
   })
+
+  it("keeps an optional assigned agent on the inbox view-model", () => {
+    expect(mapConversationFromApi(makeConversationApi()).assignedAgentId).toBeNull()
+    expect(
+      mapConversationFromApi(
+        makeConversationApi({ assigned_agent_id: "member-1" }),
+      ).assignedAgentId,
+    ).toBe("member-1")
+  })
 })

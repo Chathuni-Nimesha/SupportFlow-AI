@@ -15,8 +15,9 @@ from app.models.conversation import CONVERSATIONS_COLLECTION
 from app.models.customer import CUSTOMERS_COLLECTION
 from app.models.ticket import (
     TICKET_PRIORITIES,
-    TICKET_STATUSES,
+    TICKET_RESOLVED_STATUSES,
     TICKETS_COLLECTION,
+    TICKET_STATUSES,
     build_ticket_document,
     serialize_ticket,
     utc_now,
@@ -245,6 +246,7 @@ def _to_response(
     document: dict[str, Any],
     customers: dict[str, dict[str, Any]],
     assignees: dict[str, dict[str, Any]] | None = None,
+    conversation: dict[str, Any] | None = None,
 ) -> TicketResponse:
     customer_id = document.get("customer_id")
     assignee_id = document.get("assignee_id")
@@ -254,8 +256,48 @@ def _to_response(
             document,
             customer=customers.get(customer_id) if customer_id else None,
             assignee=assignee_map.get(assignee_id) if assignee_id else None,
+            conversation=conversation,
         ),
     )
+
+
+async def _linked_conversation_or_none(
+    conversation_id: Any,
+    workspace_id: str,
+) -> dict[str, Any] | None:
+    cleaned = _optional_id(conversation_id)
+    if cleaned is None:
+        return None
+    try:
+        return await _get_workspace_conversation(cleaned, workspace_id)
+    except HTTPException as exc:
+        if exc.status_code == status.HTTP_404_NOT_FOUND:
+            return None
+        raise
+
+
+async def _inherit_conversation_assignee(
+    conversation: dict[str, Any],
+    workspace_id: str,
+    *,
+    owner_id: str,
+) -> str | None:
+    inherited = _optional_id(conversation.get("assigned_agent_id"))
+    if inherited is None:
+        return None
+    try:
+        return await team_service.require_assignable_member(
+            inherited,
+            workspace_id,
+            owner_id=owner_id,
+        )
+    except HTTPException as exc:
+        if exc.status_code in (
+            status.HTTP_400_BAD_REQUEST,
+            status.HTTP_404_NOT_FOUND,
+        ):
+            return None
+        raise
 
 
 async def list_tickets(
@@ -344,7 +386,11 @@ async def get_ticket(
         [document["assignee_id"]] if document.get("assignee_id") else [],
         owner_id=owner_id,
     )
-    return _to_response(document, customers, assignees)
+    conversation = await _linked_conversation_or_none(
+        document.get("conversation_id"),
+        workspace_id,
+    )
+    return _to_response(document, customers, assignees, conversation)
 
 
 async def create_ticket(
@@ -357,6 +403,7 @@ async def create_ticket(
     status_value = _ensure_ticket_status(payload.status)
     priority_value = _ensure_ticket_priority(payload.priority)
     customer = await _get_workspace_customer(payload.customer_id, workspace_id)
+    conversation = None
     conversation_id = None
     if payload.conversation_id:
         conversation = await _get_workspace_conversation(
@@ -368,11 +415,23 @@ async def create_ticket(
             conversation,
         )
         conversation_id = str(conversation["_id"])
-    assignee_id = await team_service.require_assignable_member(
-        payload.assignee_id,
-        workspace_id,
-        owner_id=owner_id,
-    )
+
+    if "assignee_id" in payload.model_fields_set:
+        assignee_id = await team_service.require_assignable_member(
+            payload.assignee_id,
+            workspace_id,
+            owner_id=owner_id,
+        )
+    elif conversation is not None:
+        assignee_id = await _inherit_conversation_assignee(
+            conversation,
+            workspace_id,
+            owner_id=owner_id,
+        )
+    else:
+        assignee_id = None
+
+    resolved_at = utc_now() if status_value in TICKET_RESOLVED_STATUSES else None
 
     document = build_ticket_document(
         owner_id=owner_id,
@@ -384,6 +443,8 @@ async def create_ticket(
         status=status_value,
         priority=priority_value,
         assignee_id=assignee_id,
+        resolved_at=resolved_at,
+        resolution_note=payload.resolution_note,
     )
 
     try:
@@ -400,6 +461,7 @@ async def create_ticket(
         document,
         {str(customer["_id"]): _customer_summary(customer)},
         assignees,
+        conversation,
     )
 
 
@@ -414,6 +476,7 @@ async def _validated_ticket_updates(
     updates = payload.model_dump(exclude_unset=True)
     updates.pop("workspace_id", None)
     updates.pop("owner_id", None)
+    unset_fields: dict[str, str] = {}
 
     if "status" in updates:
         updates["status"] = _ensure_ticket_status(updates["status"])
@@ -427,6 +490,22 @@ async def _validated_ticket_updates(
             owner_id=owner_id,
         )
 
+    if "resolution_note" in updates:
+        note = updates["resolution_note"]
+        if note is None:
+            updates.pop("resolution_note")
+            unset_fields["resolution_note"] = ""
+        else:
+            updates["resolution_note"] = note
+
+    if "status" in updates:
+        if updates["status"] in TICKET_RESOLVED_STATUSES:
+            if existing.get("resolved_at") is None:
+                updates["resolved_at"] = utc_now()
+        else:
+            updates.pop("resolved_at", None)
+            unset_fields["resolved_at"] = ""
+
     customer_id_in_request = "customer_id" in updates
     if customer_id_in_request and updates["customer_id"] is None:
         # Tickets require a customer. Null does not unlink.
@@ -436,7 +515,6 @@ async def _validated_ticket_updates(
         customer = await _get_workspace_customer(updates["customer_id"], workspace_id)
         updates["customer_id"] = str(customer["_id"])
 
-    unset_fields: dict[str, str] = {}
     conversation_id_in_request = "conversation_id" in updates
     if conversation_id_in_request:
         requested_conversation_id = updates.pop("conversation_id")
@@ -526,7 +604,11 @@ async def update_ticket(
         [document["assignee_id"]] if document.get("assignee_id") else [],
         owner_id=owner_id,
     )
-    return _to_response(document, customers, assignees)
+    conversation = await _linked_conversation_or_none(
+        document.get("conversation_id"),
+        workspace_id,
+    )
+    return _to_response(document, customers, assignees, conversation)
 
 
 async def delete_ticket(ticket_id: str, workspace_id: str) -> None:

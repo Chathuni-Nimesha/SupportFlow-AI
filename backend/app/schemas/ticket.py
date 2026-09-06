@@ -69,6 +69,7 @@ class TicketCreateRequest(BaseModel):
     priority: ValidatedTicketPriority = "MEDIUM"
     assignee_id: str | None = Field(default=None, max_length=100)
     conversation_id: str | None = Field(default=None, max_length=100)
+    resolution_note: str | None = Field(default=None, max_length=2000)
 
     @field_validator("customer_id", "title", "description")
     @classmethod
@@ -86,6 +87,14 @@ class TicketCreateRequest(BaseModel):
         cleaned = value.strip()
         return cleaned or None
 
+    @field_validator("resolution_note")
+    @classmethod
+    def strip_optional_note(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
+
 
 class TicketUpdateRequest(BaseModel):
     customer_id: str | None = Field(default=None, min_length=1, max_length=100)
@@ -95,6 +104,7 @@ class TicketUpdateRequest(BaseModel):
     priority: ValidatedTicketPriority | None = None
     assignee_id: str | None = Field(default=None, max_length=100)
     conversation_id: str | None = Field(default=None, max_length=100)
+    resolution_note: str | None = Field(default=None, max_length=2000)
 
     @field_validator("customer_id", "title", "description")
     @classmethod
@@ -114,6 +124,14 @@ class TicketUpdateRequest(BaseModel):
         cleaned = value.strip()
         return cleaned or None
 
+    @field_validator("resolution_note")
+    @classmethod
+    def strip_optional_note(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
+
 
 class TicketResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -128,6 +146,11 @@ class TicketResponse(BaseModel):
     status: TicketStatus
     priority: TicketPriority
     assignee_id: str | None = None
+    resolved_at: datetime | None = None
+    resolution_note: str | None = None
+    conversation_status: str | None = None
+    conversation_assigned_agent_id: str | None = None
+    conversation_needs_resolution: bool | None = None
     created_at: datetime
     updated_at: datetime
     customer: TicketCustomerSummary | None = None

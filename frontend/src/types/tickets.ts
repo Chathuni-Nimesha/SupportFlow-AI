@@ -42,6 +42,11 @@ export type Ticket = {
   status: TicketStatus
   priority: TicketPriority
   assignee_id: string | null
+  resolved_at?: string | null
+  resolution_note?: string | null
+  conversation_status?: string | null
+  conversation_assigned_agent_id?: string | null
+  conversation_needs_resolution?: boolean | null
   created_at: string
   updated_at: string
   customer: TicketCustomerSummary | null
@@ -56,6 +61,7 @@ export type TicketCreatePayload = {
   priority?: TicketPriority
   assignee_id?: string | null
   conversation_id?: string | null
+  resolution_note?: string | null
 }
 
 export type TicketUpdatePayload = {
@@ -66,6 +72,7 @@ export type TicketUpdatePayload = {
   priority?: TicketPriority
   assignee_id?: string | null
   conversation_id?: string | null
+  resolution_note?: string | null
 }
 
 export type TicketListParams = {
@@ -88,4 +95,5 @@ export type TicketFormValues = {
   status: TicketStatus
   priority: TicketPriority
   assignee_id: string
+  resolution_note: string
 }

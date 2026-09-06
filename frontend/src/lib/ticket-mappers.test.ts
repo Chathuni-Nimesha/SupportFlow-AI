@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest"
 
 import {
   assigneeLabel,
+  conversationHasOpenTickets,
+  conversationTicketsAllResolved,
   emptyTicketFormValues,
   ticketConversationLabel,
   ticketCustomerName,
   ticketFormFromConversation,
+  ticketNeedsConversationResolution,
   toCreatePayload,
   toUpdatePayload,
   validateTicketForm,
@@ -47,6 +50,7 @@ describe("ticket mappers", () => {
         status: "OPEN",
         priority: "HIGH",
         assignee_id: "",
+        resolution_note: "",
       }),
     ).toBeNull()
     expect(
@@ -58,6 +62,7 @@ describe("ticket mappers", () => {
         status: "DONE" as TicketFormValues["status"],
         priority: "HIGH",
         assignee_id: "",
+        resolution_note: "",
       }),
     ).toBe("Invalid status.")
     expect(
@@ -69,6 +74,7 @@ describe("ticket mappers", () => {
         status: "OPEN",
         priority: "CRITICAL" as TicketFormValues["priority"],
         assignee_id: "",
+        resolution_note: "",
       }),
     ).toBe("Invalid priority.")
   })
@@ -83,6 +89,7 @@ describe("ticket mappers", () => {
         status: "OPEN",
         priority: "HIGH",
         assignee_id: "  ",
+        resolution_note: "",
       }),
     ).toEqual({
       customer_id: "cust-1",
@@ -162,6 +169,7 @@ describe("ticket mappers", () => {
       conversation_id: "conv-1",
       title: "Refund request",
       description: "Can I request a refund?",
+      assignee_id: "",
     })
     expect(
       ticketFormFromConversation({
@@ -171,5 +179,75 @@ describe("ticket mappers", () => {
         lastMessage: "Can I request a refund?",
       }).customer_id,
     ).toBe("cust-1")
+  })
+
+  it("prefills the ticket assignee from an active conversation agent", () => {
+    expect(
+      ticketFormFromConversation({
+        id: "conv-1",
+        subject: "Refund request",
+        assignedAgentId: "member-1",
+      }).assignee_id,
+    ).toBe("member-1")
+    expect(
+      ticketFormFromConversation(
+        {
+          id: "conv-1",
+          subject: "Refund request",
+          assignedAgentId: "member-1",
+        },
+        { assignableMemberIds: ["member-2"] },
+      ).assignee_id,
+    ).toBe("")
+  })
+
+  it("represents conversation and ticket resolution mismatch", () => {
+    expect(
+      ticketNeedsConversationResolution(
+        makeTicket({
+          conversation_id: "conv-1",
+          status: "RESOLVED",
+          conversation_status: "Open",
+          conversation_needs_resolution: true,
+        }),
+      ),
+    ).toBe(true)
+    expect(
+      ticketNeedsConversationResolution(
+        makeTicket({
+          conversation_id: "conv-1",
+          status: "CLOSED",
+          conversation_status: "Closed",
+          conversation_needs_resolution: false,
+        }),
+      ),
+    ).toBe(false)
+    expect(
+      conversationHasOpenTickets([makeTicket({ status: "IN_PROGRESS" })]),
+    ).toBe(true)
+    expect(
+      conversationTicketsAllResolved([makeTicket({ status: "RESOLVED" })]),
+    ).toBe(true)
+  })
+
+  it("includes a resolution note on create only when provided", () => {
+    expect(
+      toCreatePayload({
+        ...emptyTicketFormValues(),
+        customer_id: "cust-1",
+        title: "Refund",
+        description: "Paid twice",
+        status: "RESOLVED",
+        resolution_note: " Refund issued. ",
+      }),
+    ).toMatchObject({ resolution_note: "Refund issued." })
+    expect(
+      toCreatePayload({
+        ...emptyTicketFormValues(),
+        customer_id: "cust-1",
+        title: "Refund",
+        description: "Paid twice",
+      }),
+    ).not.toHaveProperty("resolution_note")
   })
 })

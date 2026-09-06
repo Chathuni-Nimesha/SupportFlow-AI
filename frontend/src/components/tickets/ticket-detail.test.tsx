@@ -24,7 +24,7 @@ describe("TicketDetailPanel", () => {
     expect(screen.getByText("elena@acme.example")).toBeInTheDocument()
     expect(screen.getByLabelText("Status")).toHaveValue("OPEN")
     expect(screen.getByLabelText("Priority")).toHaveValue("HIGH")
-    expect(screen.getByText("Assigned to")).toBeInTheDocument()
+    expect(screen.getByText("Ticket assignee")).toBeInTheDocument()
     expect(screen.getByLabelText("Assignee")).toHaveDisplayValue("Unassigned")
     expect(screen.getByText("Linked conversation")).toBeInTheDocument()
     expect(screen.getByText("Not linked")).toBeInTheDocument()
@@ -47,6 +47,34 @@ describe("TicketDetailPanel", () => {
     expect(
       screen.getByRole("link", { name: "Open conversation" }),
     ).toHaveAttribute("href", "/dashboard/conversations?conversation=conv-42")
+    expect(
+      screen.getByText(
+        /Changing the ticket assignee does not change the conversation agent/,
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it("warns when a resolved ticket still has an open conversation", () => {
+    renderWithProviders(
+      <TicketDetailPanel
+        ticket={makeTicket({
+          conversation_id: "conv-42",
+          status: "RESOLVED",
+          conversation_status: "Open",
+          conversation_needs_resolution: true,
+        })}
+        onEdit={vi.fn()}
+        onClose={vi.fn()}
+        onStatusChange={vi.fn()}
+        onPriorityChange={vi.fn()}
+        onAssigneeChange={vi.fn()}
+        members={[]}
+      />,
+    )
+
+    expect(
+      screen.getByRole("status"),
+    ).toHaveTextContent("Close the conversation separately")
   })
 
   it("displays workflow update errors", () => {

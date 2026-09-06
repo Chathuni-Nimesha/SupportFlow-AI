@@ -1,4 +1,7 @@
 import type {
+  ConversationStatus,
+} from "@/types/conversations"
+import type {
   Ticket,
   TicketCreatePayload,
   TicketFormValues,
@@ -23,6 +26,21 @@ export const TICKET_PRIORITY_LABELS: Record<TicketPriority, string> = {
   URGENT: "Urgent",
 }
 
+const TICKET_RESOLVED_STATUSES = new Set<TicketStatus>(["RESOLVED", "CLOSED"])
+const TICKET_OPEN_STATUSES = new Set<TicketStatus>([
+  "OPEN",
+  "IN_PROGRESS",
+  "PENDING",
+])
+const CONVERSATION_OPEN_STATUSES = new Set<ConversationStatus>([
+  "Open",
+  "Waiting",
+])
+const CONVERSATION_RESOLVED_STATUSES = new Set<ConversationStatus>([
+  "Closed",
+  "AI Resolved",
+])
+
 export function formatTicketDate(iso: string): string {
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return ""
@@ -42,6 +60,53 @@ export function ticketCustomerName(ticket: Ticket): string {
   return "Unknown customer"
 }
 
+export function isTicketResolved(status: TicketStatus): boolean {
+  return TICKET_RESOLVED_STATUSES.has(status)
+}
+
+export function isTicketOpen(status: TicketStatus): boolean {
+  return TICKET_OPEN_STATUSES.has(status)
+}
+
+export function isConversationThreadOpen(
+  status: ConversationStatus,
+): boolean {
+  return CONVERSATION_OPEN_STATUSES.has(status)
+}
+
+export function isConversationThreadResolved(
+  status: ConversationStatus,
+): boolean {
+  return CONVERSATION_RESOLVED_STATUSES.has(status)
+}
+
+export function ticketNeedsConversationResolution(ticket: {
+  status: TicketStatus
+  conversation_id?: string | null
+  conversation_status?: string | null
+  conversation_needs_resolution?: boolean | null
+}): boolean {
+  if (ticket.conversation_needs_resolution === true) return true
+  if (ticket.conversation_needs_resolution === false) return false
+  if (!ticket.conversation_id?.trim() || !ticket.conversation_status) {
+    return false
+  }
+  return (
+    isTicketResolved(ticket.status) &&
+    isConversationThreadOpen(ticket.conversation_status as ConversationStatus)
+  )
+}
+
+export function conversationHasOpenTickets(tickets: Ticket[]): boolean {
+  return tickets.some((ticket) => isTicketOpen(ticket.status))
+}
+
+export function conversationTicketsAllResolved(tickets: Ticket[]): boolean {
+  return (
+    tickets.length > 0 && tickets.every((ticket) => isTicketResolved(ticket.status))
+  )
+}
+
 export function emptyTicketFormValues(): TicketFormValues {
   return {
     customer_id: "",
@@ -51,21 +116,34 @@ export function emptyTicketFormValues(): TicketFormValues {
     status: "OPEN",
     priority: "MEDIUM",
     assignee_id: "",
+    resolution_note: "",
   }
 }
 
-export function ticketFormFromConversation(conversation: {
-  id: string
-  customerId?: string | null
-  subject: string
-  lastMessage?: string
-}): TicketFormValues {
+export function ticketFormFromConversation(
+  conversation: {
+    id: string
+    customerId?: string | null
+    subject: string
+    lastMessage?: string
+    assignedAgentId?: string | null
+  },
+  options?: { assignableMemberIds?: Iterable<string> },
+): TicketFormValues {
+  const assigneeId = conversation.assignedAgentId?.trim() || ""
+  const allowed = options?.assignableMemberIds
+    ? new Set(options.assignableMemberIds)
+    : null
+  const canAssign = Boolean(
+    assigneeId && (allowed === null || allowed.has(assigneeId)),
+  )
   return {
     ...emptyTicketFormValues(),
     customer_id: conversation.customerId?.trim() || "",
     conversation_id: conversation.id,
     title: conversation.subject.trim(),
     description: (conversation.lastMessage || conversation.subject).trim(),
+    assignee_id: canAssign ? assigneeId : "",
   }
 }
 
@@ -78,6 +156,7 @@ export function formValuesFromTicket(ticket: Ticket): TicketFormValues {
     status: ticket.status,
     priority: ticket.priority,
     assignee_id: ticket.assignee_id ?? "",
+    resolution_note: ticket.resolution_note ?? "",
   }
 }
 
@@ -99,6 +178,10 @@ export function toCreatePayload(values: TicketFormValues): TicketCreatePayload {
   if (conversationId) {
     payload.conversation_id = conversationId
   }
+  const resolutionNote = optionalAssignee(values.resolution_note)
+  if (resolutionNote) {
+    payload.resolution_note = resolutionNote
+  }
   return payload
 }
 
@@ -106,6 +189,7 @@ export function toUpdatePayload(values: TicketFormValues): TicketUpdatePayload {
   return {
     ...toCreatePayload(values),
     conversation_id: optionalAssignee(values.conversation_id),
+    resolution_note: optionalAssignee(values.resolution_note),
   }
 }
 
@@ -139,4 +223,15 @@ export function assigneeLabel(ticket: {
     return `${ticket.assignee.first_name} ${ticket.assignee.last_name}`.trim()
   }
   return "Assigned"
+}
+
+export function conversationAssigneeLabel(ticket: {
+  conversation_assigned_agent_id?: string | null
+  conversation_id?: string | null
+}): string {
+  if (!ticket.conversation_id?.trim()) return "No linked conversation"
+  if (!ticket.conversation_assigned_agent_id?.trim()) {
+    return "Conversation unassigned"
+  }
+  return "Conversation has an assigned agent"
 }

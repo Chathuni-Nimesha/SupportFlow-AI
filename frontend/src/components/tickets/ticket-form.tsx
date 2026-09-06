@@ -84,6 +84,14 @@ export function TicketForm({
     ) {
       next.customer_id = linkedCustomerId
     }
+    const linkedAssigneeId = conversation?.assigned_agent_id?.trim()
+    if (
+      linkedAssigneeId &&
+      !values.assignee_id &&
+      members.some((member) => member.id === linkedAssigneeId)
+    ) {
+      next.assignee_id = linkedAssigneeId
+    }
     onChange(next)
   }
 
@@ -235,6 +243,12 @@ export function TicketForm({
             <option value="">
               {membersLoading ? "Loading team…" : "Unassigned"}
             </option>
+            {values.assignee_id &&
+            !members.some((member) => member.id === values.assignee_id) ? (
+              <option value={values.assignee_id}>
+                Conversation agent
+              </option>
+            ) : null}
             {members.map((member) => (
               <option key={member.id} value={member.id}>
                 {teamMemberDisplayName(member)}
@@ -242,6 +256,24 @@ export function TicketForm({
               </option>
             ))}
           </select>
+          {values.conversation_id ? (
+            <p className="text-xs text-muted-foreground">
+              Prefills from the conversation agent when that person is an
+              active teammate. Ticket assignee stays independently editable.
+            </p>
+          ) : null}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="ticket-resolution-note">Resolution note (optional)</Label>
+          <Textarea
+            id="ticket-resolution-note"
+            value={values.resolution_note}
+            onChange={(event) => update("resolution_note", event.target.value)}
+            placeholder="What resolved this ticket?"
+            className="min-h-20 rounded-2xl"
+            disabled={isSaving}
+          />
         </div>
       </div>
 
