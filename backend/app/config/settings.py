@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 from pathlib import Path
+from os import getenv
 from typing import Annotated
 from urllib.parse import urlparse
 
@@ -57,6 +58,26 @@ PRODUCTION_CHROMA_HTTP_ERROR = (
     "unauthenticated Chroma server."
 )
 
+PRODUCTION_CHROMA_CLOUD_ERROR = (
+    "CHROMA_MODE=cloud requires CHROMA_API_KEY."
+)
+
+VERCEL_CHROMA_MODE_ERROR = (
+    "Vercel deployments cannot use localhost, persistent, or ephemeral "
+    "Chroma. Set VECTOR_STORE=mongo."
+)
+
+VERCEL_VECTOR_STORE_ERROR = (
+    "Vercel deployments cannot use Chroma. Set VECTOR_STORE=mongo."
+)
+
+CHROMA_DISABLED_FOR_MONGO_STORE = (
+    "Chroma is disabled when VECTOR_STORE=mongo."
+)
+
+VECTOR_STORE_CHROMA = "chroma"
+VECTOR_STORE_MONGO = "mongo"
+
 _LOOPBACK_CHROMA_HOSTS = frozenset(
     {
         "localhost",
@@ -91,6 +112,25 @@ def is_unsafe_jwt_secret(secret: str | None) -> bool:
     if lowered.startswith("your_"):
         return True
     return False
+
+
+def is_vercel_runtime() -> bool:
+    """True when the process is running on Vercel (platform sets VERCEL=1)."""
+    flag = (getenv("VERCEL") or "").strip().lower()
+    return flag in {"1", "true"}
+
+
+def normalize_vector_store(value: str | None) -> str:
+    """Return chroma (local) or mongo (Atlas Vector Search)."""
+    cleaned = (value or "").strip().lower()
+    if cleaned in {"mongo", "mongodb", "atlas", "mongo_vector"}:
+        return VECTOR_STORE_MONGO
+    return VECTOR_STORE_CHROMA
+
+
+def uses_mongo_vector_store(settings: "Settings | None" = None) -> bool:
+    current = settings if settings is not None else get_settings()
+    return normalize_vector_store(current.vector_store) == VECTOR_STORE_MONGO
 
 
 def is_loopback_chroma_host(host: str | None) -> bool:
@@ -131,9 +171,31 @@ def is_localhost_mongodb_uri(uri: str | None) -> bool:
     return host.startswith("127.")
 
 
+def validate_chroma_cloud(settings: "Settings") -> None:
+    """Require a Chroma Cloud API key without echoing the secret."""
+    if not (settings.chroma_api_key or "").strip():
+        raise ProductionSettingsError(PRODUCTION_CHROMA_CLOUD_ERROR)
+
+
+def validate_vercel_chroma(settings: "Settings") -> None:
+    """Vercel cannot use local Chroma. Prefer VECTOR_STORE=mongo."""
+    if uses_mongo_vector_store(settings):
+        return
+    raise ProductionSettingsError(VERCEL_VECTOR_STORE_ERROR)
+
+
+def validate_vercel_vector_store(settings: "Settings") -> None:
+    """Vercel production uses MongoDB Atlas Vector Search, not Chroma."""
+    if not uses_mongo_vector_store(settings):
+        raise ProductionSettingsError(VERCEL_VECTOR_STORE_ERROR)
+
+
 def validate_production_chroma(settings: "Settings") -> None:
     """Reject production HTTP Chroma configs that look publicly unauthenticated."""
     mode = (settings.chroma_mode or "").strip().lower()
+    if mode == "cloud":
+        validate_chroma_cloud(settings)
+        return
     if mode != "http":
         return
 
@@ -151,13 +213,16 @@ def validate_production_chroma(settings: "Settings") -> None:
 
 def apply_runtime_security_policy(settings: "Settings") -> "Settings":
     """Fail closed in production: require a real JWT secret, real Mongo URI, and disable debug."""
+    if is_vercel_runtime():
+        validate_vercel_vector_store(settings)
     if settings.is_production:
         if is_unsafe_jwt_secret(settings.jwt_secret):
             raise ProductionSettingsError(PRODUCTION_JWT_SECRET_ERROR)
         if is_localhost_mongodb_uri(settings.mongodb_uri):
             raise ProductionSettingsError(PRODUCTION_MONGODB_URI_ERROR)
         settings.app_debug = False
-        validate_production_chroma(settings)
+        if not uses_mongo_vector_store(settings):
+            validate_production_chroma(settings)
     return settings
 
 
@@ -238,12 +303,34 @@ class Settings(BaseSettings):
         default="Authorization",
         alias="CHROMA_AUTH_HEADER",
     )
+    chroma_api_key: str = Field(default="", alias="CHROMA_API_KEY")
+    chroma_tenant: str = Field(default="", alias="CHROMA_TENANT")
+    chroma_database: str = Field(default="", alias="CHROMA_DATABASE")
 
-    # Google Gemini (generation only — embeddings remain MiniLM via Chroma)
+    # Vector store: chroma (local) or mongo (Atlas Vector Search / Vercel)
+    vector_store: str = Field(default="chroma", alias="VECTOR_STORE")
+    mongo_vector_collection: str = Field(
+        default="knowledge_vectors",
+        alias="MONGO_VECTOR_COLLECTION",
+    )
+    mongo_vector_index: str = Field(
+        default="knowledge_vectors_index",
+        alias="MONGO_VECTOR_INDEX",
+    )
+
+    # Google Gemini (generation + production embeddings when VECTOR_STORE=mongo)
     google_api_key: str = Field(default="", alias="GOOGLE_API_KEY")
     gemini_model: str = Field(
         default="gemini-3.5-flash-lite",
         alias="GEMINI_MODEL",
+    )
+    gemini_embedding_model: str = Field(
+        default="gemini-embedding-001",
+        alias="GEMINI_EMBEDDING_MODEL",
+    )
+    gemini_embedding_dimensions: int = Field(
+        default=768,
+        alias="GEMINI_EMBEDDING_DIMENSIONS",
     )
 
     # Logging
@@ -289,6 +376,11 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             return [origin.strip() for origin in value.split(",") if origin.strip()]
         return value
+
+    @field_validator("vector_store", mode="before")
+    @classmethod
+    def parse_vector_store(cls, value: str | None) -> str:
+        return normalize_vector_store(value)
 
     @property
     def is_development(self) -> bool:

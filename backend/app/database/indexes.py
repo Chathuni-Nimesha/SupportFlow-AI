@@ -4,7 +4,10 @@ from app.core.logging import get_logger
 from app.database.mongodb import get_database
 from app.models.conversation import CONVERSATIONS_COLLECTION
 from app.models.customer import CUSTOMERS_COLLECTION
-from app.models.knowledge import KNOWLEDGE_DOCUMENTS_COLLECTION
+from app.models.knowledge import (
+    KNOWLEDGE_DOCUMENTS_COLLECTION,
+    KNOWLEDGE_VECTORS_COLLECTION,
+)
 from app.models.message import MESSAGES_COLLECTION
 from app.models.ticket import TICKETS_COLLECTION
 from app.models.team_member import TEAM_MEMBERS_COLLECTION
@@ -63,6 +66,9 @@ async def ensure_indexes() -> None:
     )
     await db[KNOWLEDGE_DOCUMENTS_COLLECTION].create_index(
         [("workspace_id", 1), ("status", 1)],
+    )
+    await db[KNOWLEDGE_VECTORS_COLLECTION].create_index(
+        [("workspace_id", 1), ("knowledge_document_id", 1)],
     )
     await db[CUSTOMERS_COLLECTION].create_index(
         [("owner_id", 1), ("updated_at", -1)],
@@ -150,5 +156,6 @@ async def ensure_indexes() -> None:
     )
     logger.info(
         "Ensured MongoDB indexes for users, workspaces, conversations, "
-        "messages, knowledge documents, customers, tickets, and team members",
+        "messages, knowledge documents, knowledge vectors, customers, tickets, "
+        "and team members",
     )
