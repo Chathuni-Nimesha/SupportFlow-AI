@@ -91,7 +91,7 @@ Suggestions are not sent automatically and are not stored as messages until the 
 - ChromaDB
 - Google Gemini (`google-genai`), default model `gemini-3.5-flash-lite`
 - JWT (`python-jose`), password hashing (passlib + bcrypt)
-- pytest, pytest-asyncio, mongomock-motor (tests)
+- pytest, pytest-asyncio, mongomock-motor, chromadb (tests / local Chroma; see `backend/requirements-dev.txt`)
 
 Embeddings use Chroma’s local MiniLM function, not Gemini.
 
@@ -112,8 +112,10 @@ SupportFlow-AI/
 │   │   ├── schemas/         Pydantic request/response models
 │   │   └── services/        Auth, conversations, KB, RAG, Gemini
 │   ├── tests/               pytest unit tests
-│   ├── main.py              App entrypoint (`app` for Uvicorn)
+│   ├── main.py              App entrypoint (`app` for Uvicorn/Vercel)
+│   ├── vercel.json          Backend Vercel function config (no SPA rewrite)
 │   ├── requirements.txt
+│   ├── requirements-dev.txt
 │   └── .env.example
 ├── frontend/
 │   ├── src/
@@ -170,6 +172,7 @@ Useful defaults already in `.env.example`:
 
 - API: `HOST=0.0.0.0`, `PORT=8000`, `API_PREFIX=/api/v1`
 - CORS: development allows local Vite origins on ports 5173–5175 (and preview 4173). Production origins come from `CORS_ORIGINS` only — never `*` with credentials.
+- Vector store: `VECTOR_STORE=chroma` (local Chroma). Vercel uses `VECTOR_STORE=mongo`.
 - Chroma HTTP: `CHROMA_MODE=http`, `CHROMA_HOST=localhost`, `CHROMA_PORT=8001`
 - Gemini model: `GEMINI_MODEL=gemini-3.5-flash-lite`
 
@@ -251,6 +254,63 @@ Leave this process running while you demo AI features.
 
 This is a two-process deploy: FastAPI + a static React SPA. There is no Docker image in this repository. Do not commit real secrets.
 
+### Deploy on Vercel (two Hobby projects, $0)
+
+Use **two** Vercel Hobby projects. Do not put the Vite SPA and the FastAPI API in one project: `frontend/vercel.json` rewrites unknown paths to `index.html`, which would hide `/api/v1` and `/health`.
+
+Vercel Hobby does not require a credit card. Pair it with MongoDB Atlas M0 and Gemini free tier. Do not use Chroma Cloud.
+
+**Backend project**
+
+| Setting | Value |
+|---|---|
+| Root Directory | `backend` |
+| Framework | FastAPI (auto-detected from `app` in `main.py`) |
+| Build Command | leave empty |
+| `backend/vercel.json` | `main.py` function, `maxDuration` 60s, **no** SPA rewrite |
+
+Environment variables (Project Settings → Environment Variables). Never paste real values into git.
+
+| Variable | Value |
+|---|---|
+| `APP_ENV` | `production` |
+| `MONGODB_URI` | Atlas URI (not localhost) |
+| `MONGODB_DATABASE` | e.g. `supportflow_ai` |
+| `JWT_SECRET` | Unique non-placeholder secret |
+| `GOOGLE_API_KEY` | Gemini key |
+| `CORS_ORIGINS` | Exact frontend origin, e.g. `https://<frontend>.vercel.app` (never `*`) |
+| `VECTOR_STORE` | `mongo` |
+
+Optional with defaults: `GEMINI_MODEL`, `GEMINI_EMBEDDING_MODEL=gemini-embedding-001`, `GEMINI_EMBEDDING_DIMENSIONS=768`, `MONGO_VECTOR_COLLECTION=knowledge_vectors`, `MONGO_VECTOR_INDEX=knowledge_vectors_index`.
+
+After the first backend deploy, note the URL (`https://<backend>.vercel.app`). Confirm `GET /health`.
+
+**Frontend project**
+
+| Setting | Value |
+|---|---|
+| Root Directory | `frontend` |
+| Framework | Vite |
+| Build Command | `npm run build` |
+| Output | `dist` |
+| `frontend/vercel.json` | SPA rewrite to `index.html` (this project only) |
+
+Build-time environment variable:
+
+| Variable | Value |
+|---|---|
+| `VITE_API_BASE_URL` | `https://<backend>.vercel.app/api/v1` |
+
+Do not put `MONGODB_URI`, `JWT_SECRET`, or `GOOGLE_API_KEY` in the frontend project.
+
+**Atlas (before a knowledge/AI demo)**
+
+1. Allow Vercel egress in Atlas Network Access (M0 typically `0.0.0.0/0`).
+2. Create the Vector Search index `knowledge_vectors_index` on collection `knowledge_vectors` (Atlas UI; JSON is in **Backend environment** below). Wait until the index is Active.
+3. Publish or `POST /api/v1/knowledge-documents/{id}/ingest` for knowledge documents. Chroma vectors are not migrated.
+
+**Order:** deploy backend → set frontend `VITE_API_BASE_URL` → deploy frontend → ingest published knowledge.
+
 ### New empty MongoDB vs existing database
 
 | Database | What to run |
@@ -269,8 +329,28 @@ Set these on the API host (`backend/.env` or the platform env). Never paste real
 | `MONGODB_URI` | Real Atlas or remote URI. Localhost / `127.0.0.1` is rejected. |
 | `MONGODB_DATABASE` | Database name (example: `supportflow_ai`) |
 | `CORS_ORIGINS` | Exact HTTPS frontend origin(s), comma-separated. Never `*`. |
-| `GOOGLE_API_KEY` | Real Gemini key for AI answers/suggestions. Not required to start the process. |
-| Chroma | `CHROMA_MODE=http` on loopback, or a remote host with TLS and/or `CHROMA_AUTH_TOKEN`. Gemini/Chroma are not required for process start. |
+| `GOOGLE_API_KEY` | Real Gemini key for AI answers/suggestions and (when `VECTOR_STORE=mongo`) embeddings. Not required to start the process. |
+| `VECTOR_STORE` | `chroma` for local Chroma. `mongo` on Vercel (MongoDB Atlas Vector Search). |
+| Chroma | Local only: `VECTOR_STORE=chroma` with `CHROMA_MODE=http` on loopback, or persistent/ephemeral. Vercel rejects Chroma and does not use Chroma Cloud. |
+
+On Vercel, create one Atlas Vector Search index named `knowledge_vectors_index` on collection `knowledge_vectors` (Atlas UI; M0 cannot create this index from the app). JSON:
+
+```json
+{
+  "fields": [
+    {
+      "type": "vector",
+      "path": "embedding",
+      "numDimensions": 768,
+      "similarity": "cosine"
+    },
+    { "type": "filter", "path": "workspace_id" },
+    { "type": "filter", "path": "status" }
+  ]
+}
+```
+
+Published knowledge must be ingested after switching to `VECTOR_STORE=mongo` (create/publish or `POST /api/v1/knowledge-documents/{id}/ingest`). Chroma vectors are not migrated.
 
 Start **one** Uvicorn worker. Auth and AI/search rate limits are in-memory and **not** shared across workers.
 
@@ -303,6 +383,7 @@ Shipped config (host-agnostic; does not change app behavior):
 | File | Host |
 |---|---|
 | `frontend/vercel.json` | Vercel rewrite `/(.*) → /index.html` (existing files such as `/assets/*` are still served) |
+| `backend/vercel.json` | FastAPI `app` in `main.py`, `maxDuration` 60s; no SPA rewrite |
 | `frontend/public/_redirects` | Netlify `/* /index.html 200` (copied into `dist/` on build) |
 
 Nginx equivalent:
@@ -337,8 +418,10 @@ First-time setup:
 cd backend
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 ```
+
+`requirements.txt` is the Vercel/runtime install (no Chroma). Local Chroma and pytest need `requirements-dev.txt`.
 
 Start the API (port **8000**, matching settings / frontend base URL):
 
@@ -443,10 +526,11 @@ npm test -- --run
 **Backend unit tests** (from `backend/`, with the venv):
 
 ```powershell
+pip install -r requirements-dev.txt
 .\.venv\Scripts\pytest.exe -q
 ```
 
-Backend tests use mongomock and ephemeral Chroma (`CHROMA_MODE=ephemeral` in `tests/conftest.py`). They do **not** require a live MongoDB, Chroma server, or Gemini key.
+Backend tests use mongomock, `VECTOR_STORE=chroma`, and ephemeral Chroma (`CHROMA_MODE=ephemeral` in `tests/conftest.py`). They do **not** require a live MongoDB, Chroma server, or Gemini key. Mongo vector-store tests mock Gemini embeddings.
 
 GitHub Actions (`.github/workflows/ci.yml`) runs backend pytest and frontend TypeScript, Vitest, and ESLint. CI does not start MongoDB.
 
