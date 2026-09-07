@@ -8,6 +8,7 @@ from app.models.workspace import apply_optional_workspace_id
 
 
 KNOWLEDGE_DOCUMENTS_COLLECTION = "knowledge_documents"
+KNOWLEDGE_VECTORS_COLLECTION = "knowledge_vectors"
 
 KNOWLEDGE_STATUSES = ("Draft", "Published")
 KNOWLEDGE_SOURCE_TYPES = ("manual", "url", "file")

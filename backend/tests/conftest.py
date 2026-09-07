@@ -16,6 +16,8 @@ os.environ["MONGODB_DATABASE"] = "supportflow_test"
 os.environ["CHROMA_MODE"] = "ephemeral"
 os.environ["CHROMA_EMBEDDING_MODEL"] = "hash"
 os.environ["CHROMA_COLLECTION"] = "supportflow_knowledge_test"
+os.environ["VECTOR_STORE"] = "chroma"
+os.environ.pop("VERCEL", None)
 
 
 @pytest.fixture

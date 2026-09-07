@@ -2,7 +2,13 @@
 
 from typing import Any
 
-from app.config.settings import get_settings, normalize_chroma_auth_header
+from app.config.settings import (
+    CHROMA_DISABLED_FOR_MONGO_STORE,
+    PRODUCTION_CHROMA_CLOUD_ERROR,
+    get_settings,
+    normalize_chroma_auth_header,
+    uses_mongo_vector_store,
+)
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -111,6 +117,26 @@ def http_chroma_client_kwargs(settings: Any) -> dict[str, Any]:
     return kwargs
 
 
+def cloud_chroma_client_kwargs(settings: Any) -> dict[str, Any]:
+    """
+    Build CloudClient keyword arguments from settings.
+
+    Empty tenant/database values are omitted so Chroma can use its defaults.
+    The API key is never logged.
+    """
+    kwargs: dict[str, Any] = {}
+    api_key = (settings.chroma_api_key or "").strip()
+    tenant = (settings.chroma_tenant or "").strip()
+    database = (settings.chroma_database or "").strip()
+    if api_key:
+        kwargs["api_key"] = api_key
+    if tenant:
+        kwargs["tenant"] = tenant
+    if database:
+        kwargs["database"] = database
+    return kwargs
+
+
 def get_chroma_client() -> Any:
     """
     Lazily create and return a ChromaDB client.
@@ -119,18 +145,27 @@ def get_chroma_client() -> Any:
     - http: chromadb.HttpClient(CHROMA_HOST, CHROMA_PORT, optional SSL/token)
     - persistent: local PersistentClient(CHROMA_PERSIST_DIRECTORY)
     - ephemeral: in-memory EphemeralClient (tests)
+    - cloud: chromadb.CloudClient (CHROMA_API_KEY, optional tenant/database)
     """
     global _chroma_client
+
+    settings = get_settings()
+    if uses_mongo_vector_store(settings):
+        raise RuntimeError(CHROMA_DISABLED_FOR_MONGO_STORE)
 
     if _chroma_client is not None:
         return _chroma_client
 
     import chromadb
-
-    settings = get_settings()
     mode = settings.chroma_mode.strip().lower()
 
-    if mode == "ephemeral":
+    if mode == "cloud":
+        kwargs = cloud_chroma_client_kwargs(settings)
+        if not kwargs.get("api_key"):
+            raise ValueError(PRODUCTION_CHROMA_CLOUD_ERROR)
+        _chroma_client = chromadb.CloudClient(**kwargs)
+        logger.info("ChromaDB CloudClient initialized (credentials not logged)")
+    elif mode == "ephemeral":
         _chroma_client = chromadb.EphemeralClient()
         logger.info("ChromaDB EphemeralClient initialized")
     elif mode == "persistent":

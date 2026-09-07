@@ -5,8 +5,8 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+from app.config.settings import uses_mongo_vector_store
 from app.core.logging import get_logger
-from app.database.chroma import get_knowledge_collection
 
 logger = get_logger(__name__)
 
@@ -65,6 +65,8 @@ def _query_knowledge_sync(
     query: str,
     top_k: int,
 ) -> list[dict[str, Any]]:
+    from app.database.chroma import get_knowledge_collection
+
     collection = get_knowledge_collection()
     raw = collection.query(
         query_texts=[query],
@@ -108,10 +110,10 @@ async def retrieve_knowledge(
     """
     Retrieve workspace-scoped published knowledge chunks for a query.
 
-    Tenant isolation is applied in the Chroma ``where`` filter. Results are
+    Tenant isolation is applied in the vector-store filter. Results are
     not post-filtered after an unscoped search.
 
-    Uses the same Chroma collection and embedding function as ingestion.
+    Uses the same store and embedding path as ingestion.
     Returns an empty list when the query is blank or no matches exist.
     """
     cleaned_workspace = (workspace_id or "").strip()
@@ -122,6 +124,14 @@ async def retrieve_knowledge(
     safe_top_k = normalize_top_k(top_k)
 
     try:
+        if uses_mongo_vector_store():
+            from app.services.mongo_vector_store import query_published_vectors
+
+            return await query_published_vectors(
+                workspace_id=cleaned_workspace,
+                query=cleaned_query,
+                top_k=safe_top_k,
+            )
         return await asyncio.to_thread(
             _query_knowledge_sync,
             workspace_id=cleaned_workspace,

@@ -6,9 +6,8 @@ import asyncio
 from datetime import UTC, datetime
 from typing import Any
 
-from app.config.settings import get_settings
+from app.config.settings import get_settings, uses_mongo_vector_store
 from app.core.logging import get_logger
-from app.database.chroma import get_knowledge_collection
 
 logger = get_logger(__name__)
 
@@ -74,6 +73,8 @@ def _delete_document_chunks_sync(
     workspace_id: str | None = None,
 ) -> int:
     """Remove chunks for a document. Prefer workspace-scoped deletes."""
+    from app.database.chroma import get_knowledge_collection
+
     collection = get_knowledge_collection()
     collection.delete(
         where=chroma_document_delete_filter(document_id, workspace_id),
@@ -96,6 +97,8 @@ def _upsert_document_chunks_sync(document: dict[str, Any]) -> int:
     tags = document.get("tags") or []
 
     chunks = chunk_text(f"{title}\n\n{content}")
+    from app.database.chroma import get_knowledge_collection
+
     collection = get_knowledge_collection()
 
     # Replace previous vectors for this document in the current workspace.
@@ -136,7 +139,12 @@ async def remove_document_embeddings(
     document_id: str,
     workspace_id: str | None = None,
 ) -> None:
-    """Remove Chroma chunks for a knowledge document."""
+    """Remove vector chunks for a knowledge document."""
+    if uses_mongo_vector_store():
+        from app.services.mongo_vector_store import delete_document_vectors
+
+        await delete_document_vectors(document_id, workspace_id)
+        return
     await asyncio.to_thread(
         _delete_document_chunks_sync,
         document_id,
@@ -146,7 +154,7 @@ async def remove_document_embeddings(
 
 async def ingest_knowledge_document(document: dict[str, Any]) -> dict[str, Any]:
     """
-    Embed and upsert a knowledge document into ChromaDB.
+    Embed and upsert a knowledge document into the configured vector store.
 
     Returns ingestion result fields suitable for MongoDB persistence.
     """
@@ -175,17 +183,23 @@ async def ingest_knowledge_document(document: dict[str, Any]) -> dict[str, Any]:
             "ingestion_status": "failed",
             "ingestion_error": (
                 "Cannot index knowledge without workspace_id. "
-                "Run the MongoDB workspace backfill, then Chroma re-index."
+                "Run the MongoDB workspace backfill, then re-index knowledge."
             ),
             "ingested_at": None,
             "chunk_count": 0,
         }
 
+    mongo_vectors = uses_mongo_vector_store()
     try:
-        chunk_count = await asyncio.to_thread(
-            _upsert_document_chunks_sync,
-            document,
-        )
+        if mongo_vectors:
+            from app.services.mongo_vector_store import upsert_document_vectors
+
+            chunk_count = await upsert_document_vectors(document)
+        else:
+            chunk_count = await asyncio.to_thread(
+                _upsert_document_chunks_sync,
+                document,
+            )
         return {
             "ingestion_status": "indexed",
             "ingestion_error": None,
@@ -194,14 +208,20 @@ async def ingest_knowledge_document(document: dict[str, Any]) -> dict[str, Any]:
         }
     except Exception as exc:
         logger.exception(
-            "Failed to ingest knowledge document %s into ChromaDB",
+            "Failed to ingest knowledge document %s",
             document.get("_id"),
         )
         settings = get_settings()
-        detail = (
-            f"ChromaDB ingestion failed ({settings.chroma_mode}). "
-            "Document was saved but embeddings were not updated."
-        )
+        if mongo_vectors:
+            detail = (
+                "MongoDB vector ingestion failed. "
+                "Document was saved but embeddings were not updated."
+            )
+        else:
+            detail = (
+                f"ChromaDB ingestion failed ({settings.chroma_mode}). "
+                "Document was saved but embeddings were not updated."
+            )
         return {
             "ingestion_status": "failed",
             "ingestion_error": detail,

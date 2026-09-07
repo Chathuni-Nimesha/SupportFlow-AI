@@ -224,7 +224,7 @@ async def test_chroma_query_receives_workspace_metadata_filter() -> None:
         "distances": [[]],
     }
     with patch(
-        "app.services.knowledge_retrieval.get_knowledge_collection",
+        "app.database.chroma.get_knowledge_collection",
         return_value=fake_collection,
     ):
         results = await retrieve_knowledge(
