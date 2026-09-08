@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { BookOpen, Plus } from "lucide-react"
+import { useSearchParams } from "react-router-dom"
 
 import { KnowledgeDocumentDetail } from "@/components/knowledge-base/knowledge-document-detail"
 import { KnowledgeDocumentForm } from "@/components/knowledge-base/knowledge-document-form"
@@ -38,10 +39,32 @@ import { canManageKnowledge } from "@/lib/workspace-permissions"
 
 type PanelMode = "closed" | "create" | "edit" | "view" | "delete"
 
+function replaceSearchParam(
+  searchParams: URLSearchParams,
+  setSearchParams: ReturnType<typeof useSearchParams>[1],
+  key: string,
+  value: string | null,
+) {
+  const current = searchParams.get(key)
+  if (value) {
+    if (current === value) return
+    const next = new URLSearchParams(searchParams)
+    next.set(key, value)
+    setSearchParams(next, { replace: true })
+    return
+  }
+  if (!searchParams.has(key)) return
+  const next = new URLSearchParams(searchParams)
+  next.delete(key)
+  setSearchParams(next, { replace: true })
+}
+
 export function KnowledgeBaseBoard() {
   const { user, isLoading: isAuthLoading, currentWorkspace } = useAuth()
   const canManage = !isAuthLoading && canManageKnowledge(user)
   const workspaceId = currentWorkspace?.id ?? null
+  const [searchParams, setSearchParams] = useSearchParams()
+  const requestedDocumentId = searchParams.get("document")?.trim() || null
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([])
   const [search, setSearch] = useState("")
   const [listLoading, setListLoading] = useState(true)
@@ -97,6 +120,7 @@ export function KnowledgeBaseBoard() {
     setDetailError(null)
     setIngestError(null)
     setFormValues(emptyKnowledgeFormValues())
+    replaceSearchParam(searchParams, setSearchParams, "document", null)
   }
 
   const openCreate = () => {
@@ -104,6 +128,7 @@ export function KnowledgeBaseBoard() {
     setFormValues(emptyKnowledgeFormValues())
     setFormError(null)
     setPanelMode("create")
+    replaceSearchParam(searchParams, setSearchParams, "document", null)
   }
 
   const openEdit = (document: KnowledgeDocument) => {
@@ -111,6 +136,7 @@ export function KnowledgeBaseBoard() {
     setFormValues(formValuesFromDocument(document))
     setFormError(null)
     setPanelMode("edit")
+    replaceSearchParam(searchParams, setSearchParams, "document", null)
   }
 
   const openView = async (document: KnowledgeDocument) => {
@@ -118,6 +144,7 @@ export function KnowledgeBaseBoard() {
     setDetailError(null)
     setIngestError(null)
     setPanelMode("view")
+    replaceSearchParam(searchParams, setSearchParams, "document", document.id)
     setDetailLoading(true)
     try {
       const fresh = await getKnowledgeDocument(document.id)
@@ -134,10 +161,46 @@ export function KnowledgeBaseBoard() {
     }
   }
 
+  useEffect(() => {
+    if (!requestedDocumentId || listLoading) return
+    if (panelMode === "create" || panelMode === "edit" || panelMode === "delete") {
+      return
+    }
+    if (activeDocument?.id === requestedDocumentId && panelMode === "view") {
+      return
+    }
+    const listed = documents.find((item) => item.id === requestedDocumentId)
+    if (!listed && listError) {
+      return
+    }
+    void openView(
+      listed ?? {
+        id: requestedDocumentId,
+        title: "Document",
+        content: "",
+        status: "Draft",
+        source_type: "manual",
+        source: null,
+        tags: [],
+        ingestion_status: "not_indexed",
+        ingestion_error: null,
+        ingested_at: null,
+        chunk_count: 0,
+        owner_id: "",
+        workspace_id: workspaceId ?? undefined,
+        created_at: "",
+        updated_at: "",
+      },
+    )
+    // Intentionally depend on the deep-link id and loaded list, not openView.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestedDocumentId, documents, workspaceId, listLoading, listError])
+
   const openDelete = (document: KnowledgeDocument) => {
     setActiveDocument(document)
     setFormError(null)
     setPanelMode("delete")
+    replaceSearchParam(searchParams, setSearchParams, "document", null)
   }
 
   const handleCreate = async () => {

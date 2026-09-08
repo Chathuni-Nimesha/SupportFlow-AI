@@ -23,7 +23,9 @@ This repository is a production-oriented AI customer-support workspace. There is
 | Isolation | Data is scoped to the selected workspace (`workspace_id`), resolved server-side |
 | Health | `GET /health` reports process and MongoDB ping (`connected` / `disconnected`) |
 
-**Intentionally not included yet:** public chatbot, email invitations, notifications, global search, billing, SSO, Google OAuth, password reset, CSAT, email/Slack ingestion, autonomous sending.
+**Intentionally not included yet:** public chatbot, email invitations, notifications, billing, SSO, Google OAuth, password reset, CSAT, email/Slack ingestion, autonomous sending.
+
+**Available:** workspace-scoped global search across conversations, tickets, customers, and knowledge (`GET /api/v1/search`).
 
 ---
 
@@ -562,7 +564,7 @@ GitHub Actions (`.github/workflows/ci.yml`) runs backend pytest and frontend Typ
 | Customer deletion | Working — blocked while tickets remain; conversations unlink and keep name/email snapshots |
 | Team management | Working — workspace team directory (OWNER/ADMIN/AGENT). Directory members cannot sign in; email invitations are not sent |
 | Notifications | Unavailable |
-| Global search | Unavailable (MVP scope) |
+| Global search | Workspace-scoped search across conversations, tickets, customers, and knowledge (`GET /api/v1/search`) |
 | Billing | Unavailable (MVP scope) |
 | SSO | Unavailable (MVP scope) |
 | Google OAuth | Unavailable (MVP scope) |
@@ -645,9 +647,28 @@ Do not use `uvicorn backend.main:app` from the repository root.
 
 ---
 
+## Local portfolio demo data (optional)
+
+For realistic local screenshots, seed one development workspace with customers, conversations, tickets, team members, and published knowledge documents.
+
+**Safety:** the seed refuses `APP_ENV=production` and Vercel. By default it also refuses a non-localhost `MONGODB_URI` unless you pass `--allow-non-localhost` (personal Atlas *dev* cluster only — never production).
+
+Prerequisites: MongoDB reachable via `backend/.env`, and for RAG indexing Chroma running locally (`VECTOR_STORE=chroma`, default HTTP on port 8001) unless you use ephemeral/hash mode in tests.
+
+Populate your **current** logged-in development workspace:
+
+```powershell
+cd backend
+python -m scripts.seed_demo_data --owner-email you@example.com --allow-non-localhost
+```
+
+`--create-owner-if-missing` is off by default so the seed does not invent a new account.
+
+---
+
 ## License and demo accounts
 
-Register your own local account. This project does not ship a shared demo user.
+You can register your own local account, or use the optional local portfolio seed above for screenshots. The seed is development-only and must not be used against production.
 
 Do not commit or paste:
 
