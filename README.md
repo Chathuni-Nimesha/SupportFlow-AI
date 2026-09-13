@@ -82,7 +82,7 @@ SupportFlow-AI/
 ├── frontend/             React + Vite SPA, vercel.json (SPA rewrite)
 ├── docs/
 │   ├── deployment.md     Vercel / Atlas setup
-│   └── screenshots/      Portfolio images (add here)
+│ 
 └── README.md
 ```
 
