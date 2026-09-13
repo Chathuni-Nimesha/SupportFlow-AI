@@ -20,33 +20,6 @@ Everything runs inside an authenticated, multi-tenant workspace. AI answers and 
 - **Global search** — workspace-scoped search across conversations, tickets, customers, and knowledge
 - **Analytics** — conversation counts derived from the live inbox
 
-## Screenshots
-
-Portfolio screenshots will live under `docs/screenshots/` (files not added yet):
-
-```text
-docs/screenshots/dashboard.png
-docs/screenshots/conversations.png
-docs/screenshots/ai-assistant.png
-docs/screenshots/knowledge-base.png
-docs/screenshots/tickets.png
-docs/screenshots/customers.png
-docs/screenshots/analytics.png
-docs/screenshots/team.png
-```
-
-<!-- Uncomment after adding the image files:
-
-![Dashboard](docs/screenshots/dashboard.png)
-![Conversations](docs/screenshots/conversations.png)
-![AI Assistant](docs/screenshots/ai-assistant.png)
-![Knowledge Base](docs/screenshots/knowledge-base.png)
-![Tickets](docs/screenshots/tickets.png)
-![Customers](docs/screenshots/customers.png)
-![Analytics](docs/screenshots/analytics.png)
-![Team](docs/screenshots/team.png)
-
--->
 
 ## Technology Stack
 
