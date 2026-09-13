@@ -40,31 +40,6 @@ Everything runs inside an authenticated, multi-tenant workspace. AI answers and 
 
 Default chat model: `gemini-3.5-flash-lite` (overridable via `GEMINI_MODEL`).
 
-## Architecture
-
-**Local**
-
-```mermaid
-flowchart LR
-  FE["React / Vite"] --> API["FastAPI"]
-  API --> Mongo[(MongoDB)]
-  API --> Chroma[(ChromaDB)]
-  API --> Gemini["Gemini"]
-```
-
-**Production**
-
-```mermaid
-flowchart LR
-  FE["Vercel Frontend"] --> API["Vercel FastAPI"]
-  API --> Atlas[(MongoDB Atlas)]
-  API --> VS["Atlas Vector Search"]
-  Atlas --> VS
-  API --> Gemini["Gemini"]
-```
-
-Local RAG uses Chroma. Production uses Atlas Vector Search—not Chroma.
-
 ## AI / RAG
 
 ```text
@@ -123,10 +98,10 @@ Copy-Item frontend\.env.example frontend\.env
 Set `MONGODB_URI`, `MONGODB_DATABASE`, `JWT_SECRET`, and `GOOGLE_API_KEY` in `backend/.env`. Keep `VECTOR_STORE=chroma` locally. Frontend default: `VITE_API_BASE_URL=http://localhost:8000/api/v1`.
 
 **Chroma** (repo root):
-
-```powershell
-backend\.venv\Scripts\chroma.exe run --path .\backend\chroma --host localhost --port 8001
-```
+backend\.venv\Scripts\chroma.exe run `
+  --path .\backend\chroma `
+  --host localhost `
+  --port 8001
 
 **Backend** (from `backend/`):
 
@@ -187,5 +162,3 @@ Full setup (env vars, vector index, SPA rewrite notes): **[docs/deployment.md](d
 Software Engineer | Full Stack Developer
 
 - Portfolio: [https://chathuni-nimesha.github.io/](https://chathuni-nimesha.github.io/)
-- GitHub: [https://github.com/Chathuni-Nimesha](https://github.com/Chathuni-Nimesha)
-- Behance: [https://www.behance.net/chathuninimesha](https://www.behance.net/chathuninimesha)
